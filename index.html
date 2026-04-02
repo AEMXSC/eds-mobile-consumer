@@ -484,8 +484,8 @@ function App(){
                   ].map((col,i)=>(
                     <div key={i} style={{background:"#0D1117",borderRadius:10,padding:"12px 14px",border:`1px solid ${col.color}22`}}>
                       <p style={{fontSize:10,fontWeight:800,color:col.color,margin:"0 0 4px",fontFamily:MONO,textTransform:"uppercase",letterSpacing:".06em"}}>{col.label}</p>
-                      <p style={{fontSize:9,color:"#475569",margin:"0 0 10px",fontFamily:MONO}}>{col.lines}</p>
-                      {col.items.map((it,ii)=><p key={ii} style={{fontSize:10.5,color:i===0?"#94A3B8":"#475569",margin:"3px 0",fontFamily:MONO}}>{it}</p>)}
+                      <p style={{fontSize:9,color:"#64748B",margin:"0 0 10px",fontFamily:MONO}}>{col.lines}</p>
+                      {col.items.map((it,ii)=><p key={ii} style={{fontSize:10.5,color:"#94A3B8",margin:"3px 0",fontFamily:MONO}}>{it}</p>)}
                     </div>
                   ))}
                 </div>
