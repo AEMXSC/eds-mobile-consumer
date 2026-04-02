@@ -80,8 +80,9 @@ const MONO = MONO;
 
 // ── Fetch with CORS proxy fallback ───────────────────────────────────────────
 async function tryFetch(url){
-  try{ const r=await fetch(url,{headers:{accept:"application/json"}}); if(r.ok) return {d:await r.json(),st:"live"}; }catch(_){}
-  for(const p of PROXIES){ try{ const r=await fetch(p(url)); if(r.ok) return {d:await r.json(),st:"proxy"}; }catch(_){} }
+  const bust = `${url}${url.includes("?")?"&":"?"}_t=${Date.now()}`;
+  try{ const r=await fetch(bust,{cache:"no-store",headers:{accept:"application/json"}}); if(r.ok) return {d:await r.json(),st:"live"}; }catch(_){}
+  for(const p of PROXIES){ try{ const r=await fetch(p(bust),{cache:"no-store"}); if(r.ok) return {d:await r.json(),st:"proxy"}; }catch(_){} }
   return null;
 }
 
