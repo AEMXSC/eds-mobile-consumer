@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EDS → Mobile Consumer | AEM XSC Demo Tool</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  html,body,#root{height:100%}
+  body{font-family:'DM Sans',-apple-system,sans-serif;background:#F5F5F7;color:#1D1D1F}
+  @keyframes spin{to{transform:rotate(360deg)}}
+</style>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useCallback } = React;
+
+const SVC = "https://mhast-html-to-json.adobeaem.workers.dev";
+const PROXIES = [
+  u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+  u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+];
+const PRESETS = [
+  { id:"court", label:"courtneydemo", url:`${SVC}/scdemos/courtneydemo/?compact=true&head=false` },
+  { id:"bbird", label:"bbird demo",   url:`${SVC}/scdemos/demo/?compact=true&head=false` },
+  { id:"xsc",   label:"xscteamsite",  url:`${SVC}/aemxsc/xscteamsite/?compact=true&head=false` },
+];
+const SAMPLE = { sections:[
+  { t:"hero", title:"The Science of Wealth Preservation.", sub:"Guided Path to Financial Independence", img:"https://demo.bbird.live/media_1f8d434868eabca293e9c9463b6d640273794af1b.png?width=750&format=png&optimize=medium" },
+  { t:"text", h:"The Idea", b:"The concept of Financial Independence is rooted in a simple principle: building enough assets so that your investments can support your lifestyle. Popularized by the FIRE movement, this approach emphasizes disciplined saving, thoughtful spending, and long-term investing." },
+  { t:"text", h:"Why This Exists", b:"This project was inspired by financial independence communities, where the real insight goes beyond saving and investing to the discipline and mindset behind long-term stability." },
+  { t:"cta", text:"Build your FIRE plan step by step", btn:"Get Started" },
+  { t:"cards", items:[
+    { title:"Start Here", desc:"Take the 5-minute quiz and get your personal FIRE plan.", img:"https://demo.bbird.live/media_18aff15c495acc2d64c7da01d6988fe979c38926d.png?width=750&format=png&optimize=medium" },
+    { title:"Financial Independence", desc:"Learn the core idea, the simple math, and the path forward.", img:"https://demo.bbird.live/media_1e23036ffb279f53a8b7b1f8c4ebd6f533afa5792.jpg?width=750&format=jpg&optimize=medium" },
+    { title:"Budgeting Basics", desc:"Build a simple plan for spending, saving, and goals.", img:"https://demo.bbird.live/media_15fbb4d6f12f757450f8c32ad50a11895bf60fcf0.jpg?width=750&format=jpg&optimize=medium" },
+    { title:"Tools & Calculators", desc:"Run the numbers on savings rate, net worth, and growth.", img:"https://demo.bbird.live/media_10ab33f7c7110ea4c2fb0b05ee2edd3a656bd6f9d.jpg?width=750&format=jpg&optimize=medium" },
+  ]},
+]};
+
+function strip(h){ return (h||"").replace(/<[^>]*>/g,"").replace(/&amp;/g,"&").replace(/&nbsp;/g," ").trim(); }
+
+function parseResponse(data){
+  const body = data?.body||data?.content||data;
+  const items = Array.isArray(body)?body:body?.children||body?.items||[];
+  const s=[];let hero=false;
+  items.forEach(it=>{
+    if(!hero&&it.tag==="h1"){s.push({t:"hero",title:strip(it.innerHTML),sub:"",img:null});hero=true;}
+    else if(it.tag==="h1"||it.tag==="h2") s.push({t:"text",h:strip(it.innerHTML),b:""});
+    else if(it.tag==="p"&&s.length){const l=s[s.length-1];const k=l.t==="hero"?"sub":"b";l[k]=((l[k]||"")+" "+strip(it.innerHTML)).trim();}
+    else if(it.name||it.blockName||it.type==="block"){
+      const nm=it.name||it.blockName||"";const ch=it.children||it.rows||[];
+      if(nm==="cards"||nm==="columns"){
+        const ci=ch.map(r=>{const c=r.columns||r.children||[];return{title:strip(c[0]?.innerHTML||""),desc:strip(c[1]?.innerHTML||""),img:null};}).filter(x=>x.title);
+        if(ci.length) s.push({t:"cards",items:ci});
+      } else s.push({t:"block",name:nm});
+    }
+  });
+  return {sections:s.length?s:SAMPLE.sections};
+}
+
+/* ---- iOS content renderer ---- */
+function PhoneUI({content,ts,loading}){
+  const sf="'SF Pro Display',-apple-system,'Helvetica Neue',sans-serif";
+  if(loading) return(
+    <div style={{padding:"100px 20px",textAlign:"center",fontFamily:sf}}>
+      <div style={{width:28,height:28,border:"3px solid #E5E5EA",borderTopColor:"#007AFF",borderRadius:"50%",animation:"spin .7s linear infinite",margin:"0 auto 14px"}}/>
+      <p style={{fontSize:13,color:"#8E8E93"}}>Fetching from DA&hellip;</p>
+    </div>
+  );
+  if(!content) return <div style={{padding:"100px 20px",textAlign:"center",fontFamily:sf}}><p style={{fontSize:13,color:"#8E8E93"}}>Enter a URL and hit Fetch</p></div>;
+  return(
+    <div style={{fontFamily:sf}}>
+      {content.sections.map((s,i)=>{
+        if(s.t==="hero") return(
+          <div key={i} style={{position:"relative",marginBottom:18}}>
+            {s.img&&<img src={s.img} alt="" style={{width:"100%",height:170,objectFit:"cover"}}/>}
+            <div style={{padding:s.img?"14px 18px":"28px 18px 14px",background:s.img?"linear-gradient(transparent,rgba(0,0,0,.75))":"none",position:s.img?"absolute":"relative",bottom:0,left:0,right:0}}>
+              {s.sub&&<p style={{fontSize:10,fontWeight:500,textTransform:"uppercase",letterSpacing:".08em",color:s.img?"rgba(255,255,255,.7)":"#8E8E93",margin:"0 0 3px"}}>{s.sub}</p>}
+              <h1 style={{fontSize:20,fontWeight:700,color:s.img?"#fff":"#000",margin:0,lineHeight:1.2}}>{s.title}</h1>
+            </div>
+          </div>
+        );
+        if(s.t==="text") return(
+          <div key={i} style={{padding:"0 18px",marginBottom:14}}>
+            {s.h&&<h2 style={{fontSize:15,fontWeight:700,color:"#000",margin:"0 0 4px"}}>{s.h}</h2>}
+            {s.b&&<p style={{fontSize:12.5,color:"#3C3C43",lineHeight:1.5,margin:0}}>{s.b}</p>}
+          </div>
+        );
+        if(s.t==="cta") return(
+          <div key={i} style={{padding:"4px 18px",marginBottom:14,textAlign:"center"}}>
+            <p style={{fontSize:13,color:"#3C3C43",margin:"0 0 8px",fontWeight:500}}>{s.text}</p>
+            <div style={{background:"#007AFF",color:"#fff",borderRadius:12,padding:"10px 22px",fontSize:14,fontWeight:600,display:"inline-block"}}>{s.btn}</div>
+          </div>
+        );
+        if(s.t==="cards") return(
+          <div key={i} style={{padding:"0 18px",marginBottom:12}}>
+            {s.items.map((c,ci)=>(
+              <div key={ci} style={{display:"flex",gap:10,alignItems:"center",padding:"10px 0",borderBottom:ci<s.items.length-1?"1px solid #E5E5EA":"none"}}>
+                {c.img?<img src={c.img} alt="" style={{width:48,height:48,borderRadius:11,objectFit:"cover",flexShrink:0}}/>:
+                <div style={{width:48,height:48,borderRadius:11,background:"#F2F2F7",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:18}}>☕</span></div>}
+                <div style={{flex:1,minWidth:0}}>
+                  <p style={{fontSize:13.5,fontWeight:600,color:"#000",margin:0}}>{c.title}</p>
+                  <p style={{fontSize:11,color:"#8E8E93",margin:"1px 0 0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.desc}</p>
+                </div>
+                <span style={{color:"#C7C7CC",fontSize:14}}>›</span>
+              </div>
+            ))}
+          </div>
+        );
+        if(s.t==="block") return(
+          <div key={i} style={{padding:"0 18px",marginBottom:10}}>
+            <div style={{background:"#F2F2F7",borderRadius:9,padding:10}}>
+              <span style={{fontSize:9,fontWeight:600,color:"#8E8E93",textTransform:"uppercase",letterSpacing:".06em"}}>{s.name||"block"}</span>
+            </div>
+          </div>
+        );
+        return null;
+      })}
+      {ts&&<p style={{textAlign:"center",fontSize:9,color:"#C7C7CC",padding:"6px 0 18px"}}>Last sync: {ts}</p>}
+    </div>
+  );
+}
+
+/* ---- Main ---- */
+function App(){
+  const [url,setUrl]=useState(PRESETS[0].url);
+  const [active,setActive]=useState("court");
+  const [content,setContent]=useState(SAMPLE);
+  const [ts,setTs]=useState(null);
+  const [loading,setLoading]=useState(false);
+  const [status,setStatus]=useState(null);
+  const [rawJson,setRawJson]=useState(null);
+  const [showRaw,setShowRaw]=useState(false);
+
+  const doFetch=useCallback(async()=>{
+    setLoading(true);setStatus(null);const u=url.trim();
+    try{const r=await fetch(u,{headers:{accept:"application/json"}});if(r.ok){const d=await r.json();setRawJson(d);setContent(parseResponse(d));setTs(new Date().toLocaleTimeString());setStatus("live");setLoading(false);return;}}catch(_){}
+    for(const p of PROXIES){try{const r=await fetch(p(u),{headers:{accept:"application/json"}});if(r.ok){const d=await r.json();setRawJson(d);setContent(parseResponse(d));setTs(new Date().toLocaleTimeString());setStatus("proxy");setLoading(false);return;}}catch(_){}}
+    setStatus("error");setTs(new Date().toLocaleTimeString()+" (cached)");setLoading(false);
+  },[url]);
+
+  const pick=(p)=>{setActive(p.id);setUrl(p.url);setRawJson(null);setStatus(null);};
+
+  const mono="'DM Mono',monospace";
+
+  const aemcs=`// Pre-req: Define CF Model (AEM > Tools > Assets > CF Models)
+// Pre-req: Create Content Fragments in AEM Assets DAM
+// Pre-req: Register persisted query on AEM CS GraphQL endpoint
+
+// Fetch from AEM CS persisted query endpoint
+const resp = await fetch(
+  "https://publish-p12345-e67890.adobeaemcloud.com"
+  + "/graphql/execute.json/my-site/page-content"
+  + ";path=/content/dam/my-site/en/page",
+  {
+    headers: {
+      "Authorization": "Bearer " + accessToken,
+      "Content-Type": "application/json"
+    }
+  }
+);
+const { data } = await resp.json();
+
+// Persisted query definition (registered in AEM):
+// query PageContent($path: String!) {
+//   articleByPath(_path: $path) {
+//     item {
+//       _path
+//       title
+//       body { json plaintext }
+//       featuredImage {
+//         ... on ImageRef {
+//           _publishUrl
+//           width
+//           height
+//         }
+//       }
+//     }
+//   }
+// }`;
+
+  return(
+    <div style={{minHeight:"100vh",background:"#F5F5F7"}}>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+
+      {/* Header */}
+      <div style={{padding:"20px 28px",background:"#fff",borderBottom:"1px solid #E5E5EA"}}>
+        <h1 style={{fontSize:20,fontWeight:800,letterSpacing:"-0.03em",margin:0}}>EDS → Mobile Consumer</h1>
+        <p style={{fontSize:12,color:"#86868B",margin:"2px 0 0"}}>Point any EDS page at this app. Author in DA, consume on mobile. One fetch call.</p>
+      </div>
+
+      {/* URL Bar */}
+      <div style={{padding:"14px 28px",background:"#fff",borderBottom:"1px solid #E5E5EA"}}>
+        <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:10}}>
+          <input
+            value={url} onChange={e=>{setUrl(e.target.value);setActive(null);}}
+            onKeyDown={e=>{if(e.key==="Enter")doFetch();}}
+            placeholder="https://mhast-html-to-json.adobeaem.workers.dev/org/repo/path"
+            style={{flex:1,background:"#1D1D1F",border:"1.5px solid #333",borderRadius:10,padding:"11px 14px",color:"#30D158",fontSize:13,fontFamily:mono,outline:"none"}}
+          />
+          <button onClick={doFetch} disabled={loading} style={{
+            background:loading?"#B0B0B8":"#007AFF",color:"#fff",border:"none",borderRadius:10,
+            padding:"11px 22px",fontSize:14,fontWeight:700,cursor:loading?"wait":"pointer",
+            fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap",
+          }}>{loading?"Fetching…":"⟳ Fetch"}</button>
+        </div>
+        <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+          <span style={{fontSize:10,color:"#86868B",fontWeight:600,textTransform:"uppercase",letterSpacing:".06em",fontFamily:mono}}>Presets:</span>
+          {PRESETS.map(p=>(
+            <button key={p.id} onClick={()=>pick(p)} style={{
+              background:active===p.id?"#1D1D1F":"#E8E8ED",
+              color:active===p.id?"#fff":"#636366",
+              border:"none",borderRadius:6,padding:"5px 12px",fontSize:11,fontWeight:600,
+              cursor:"pointer",fontFamily:mono,transition:"all .15s",
+            }}>{p.label}</button>
+          ))}
+          {status&&(
+            <span style={{marginLeft:"auto",fontSize:10,fontFamily:mono,fontWeight:600,padding:"3px 10px",borderRadius:5,letterSpacing:".04em",textTransform:"uppercase",
+              background:status==="live"?"#D1FAE5":status==="proxy"?"#FEF3C7":"#FEE2E2",
+              color:status==="live"?"#065F46":status==="proxy"?"#92400E":"#991B1B",
+            }}>{status==="live"?"✓ live":status==="proxy"?"⚡ via proxy":"✗ cors blocked — showing cached"}</span>
+          )}
+        </div>
+      </div>
+
+      {/* Main content */}
+      <div style={{display:"flex",gap:0,minHeight:"calc(100vh - 160px)"}}>
+
+        {/* Left — code story */}
+        <div style={{flex:1,padding:"24px 28px",overflow:"auto"}}>
+
+          {/* EDS fetch */}
+          <div style={{marginBottom:24}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+              <div style={{width:8,height:8,borderRadius:"50%",background:"#34C759"}}/>
+              <span style={{fontSize:14,fontWeight:700}}>EDS + html2json</span>
+              <span style={{fontSize:10,fontWeight:600,background:"#D1FAE5",color:"#065F46",padding:"2px 8px",borderRadius:4,fontFamily:mono}}>1 line</span>
+            </div>
+            <div style={{background:"#1D1D1F",borderRadius:12,padding:"16px 18px",overflow:"auto"}}>
+              <pre style={{margin:0,fontSize:12,lineHeight:1.7,fontFamily:mono,color:"#E8E8ED",whiteSpace:"pre-wrap",wordBreak:"break-all"}}>
+                <span style={{color:"#FF9F0A"}}>const </span>
+                <span style={{color:"#64D2FF"}}>content</span>
+                <span> = </span>
+                <span style={{color:"#FF9F0A"}}>await </span>
+                <span style={{color:"#BF5AF2"}}>fetch</span>
+                <span>(</span>
+                <span style={{color:"#30D158"}}>"{url}"</span>
+                <span>)</span>
+              </pre>
+            </div>
+            <p style={{fontSize:11,color:"#86868B",margin:"8px 0 0",lineHeight:1.5}}>
+              That's the entire integration. The page authored in DA is now structured JSON any app can consume.
+            </p>
+          </div>
+
+          {/* GraphQL comparison */}
+          <div style={{marginBottom:24}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+              <div style={{width:8,height:8,borderRadius:"50%",background:"#FF9F0A"}}/>
+              <span style={{fontSize:14,fontWeight:700}}>AEM CS — Content Fragments + Persisted Query</span>
+              <span style={{fontSize:10,fontWeight:600,background:"#FEF3C7",color:"#92400E",padding:"2px 8px",borderRadius:4,fontFamily:mono}}>~20 lines + CF model + auth</span>
+            </div>
+            <div style={{background:"#1D1D1F",borderRadius:12,padding:"16px 18px",overflow:"auto",opacity:.55,maxHeight:220}}>
+              <pre style={{margin:0,fontSize:10,lineHeight:1.45,fontFamily:mono,color:"#A1A1A6",whiteSpace:"pre-wrap"}}>{aemcs}</pre>
+            </div>
+            <p style={{fontSize:11,color:"#86868B",margin:"8px 0 0",lineHeight:1.5}}>
+              Still the right choice for structured data with relationships, variations, and DAM governance — but that's CF modeling, persisted queries, auth tokens, and a publish endpoint before a single byte of content reaches the consumer.
+            </p>
+          </div>
+
+          {/* Raw JSON toggle */}
+          {rawJson&&(
+            <div>
+              <button onClick={()=>setShowRaw(!showRaw)} style={{background:"none",border:"1px solid #D1D1D6",borderRadius:8,padding:"8px 16px",fontSize:12,fontWeight:600,cursor:"pointer",color:"#636366"}}>
+                {showRaw?"Hide":"Show"} raw JSON response
+              </button>
+              {showRaw&&(
+                <pre style={{background:"#1D1D1F",color:"#A1A1A6",borderRadius:12,padding:16,marginTop:10,fontSize:10,fontFamily:mono,overflow:"auto",maxHeight:300,lineHeight:1.5,whiteSpace:"pre-wrap",wordBreak:"break-word"}}>
+                  {JSON.stringify(rawJson,null,2)}
+                </pre>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Right — iPhone 16 */}
+        <div style={{width:400,flexShrink:0,display:"flex",flexDirection:"column",alignItems:"center",padding:"20px 20px 30px",background:"#EDEDF0",borderLeft:"1px solid #E5E5EA"}}>
+
+          {/* iPhone 16 — SVG frame overlay + content underneath */}
+          <div style={{
+            width:310,height:640,position:"relative",
+            filter:"drop-shadow(0 25px 50px rgba(0,0,0,0.18)) drop-shadow(0 8px 16px rgba(0,0,0,0.1))",
+          }}>
+            {/* Content area — sits behind the SVG frame, visible through the screen cutout */}
+            <div style={{
+              position:"absolute",top:8,left:8,right:8,bottom:8,
+              background:"#fff",borderRadius:40,overflow:"hidden",zIndex:1,
+              display:"flex",flexDirection:"column",
+            }}>
+              {/* Status bar */}
+              <div style={{padding:"14px 24px 4px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+                <span style={{fontSize:14,fontWeight:700,color:"#000",fontFamily:"-apple-system,sans-serif"}}>
+                  {new Date().toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}
+                </span>
+                <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                  <svg width="16" height="11" viewBox="0 0 16 11"><rect x="0" y="7" width="3" height="4" rx="0.7" fill="#000"/><rect x="4" y="5" width="3" height="6" rx="0.7" fill="#000"/><rect x="8" y="2.5" width="3" height="8.5" rx="0.7" fill="#000"/><rect x="12" y="0" width="3" height="11" rx="0.7" fill="#000"/></svg>
+                  <svg width="24" height="11" viewBox="0 0 24 11"><rect x="0.5" y="0.5" width="20" height="10" rx="2.5" fill="none" stroke="#000" strokeWidth="1"/><rect x="22" y="3" width="2" height="5" rx="1" fill="#000"/><rect x="2" y="2" width="13" height="7" rx="1.5" fill="#34C759"/></svg>
+                </div>
+              </div>
+
+              {/* Scrollable content */}
+              <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
+                <PhoneUI content={content} ts={ts} loading={loading}/>
+              </div>
+            </div>
+
+            {/* SVG Frame overlay — renders on top, screen area is transparent */}
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 310 640" width="310" height="640" style={{position:"absolute",top:0,left:0,zIndex:2,pointerEvents:"none"}}>
+              <defs>
+                <mask id="screenMask">
+                  <rect width="310" height="640" fill="white" rx="48"/>
+                  <rect x="8" y="8" width="294" height="624" rx="40" fill="black"/>
+                </mask>
+                <linearGradient id="frameEdge" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stopColor="#3a3a3e"/>
+                  <stop offset="30%" stopColor="#1a1a1e"/>
+                  <stop offset="70%" stopColor="#1a1a1e"/>
+                  <stop offset="100%" stopColor="#2e2e32"/>
+                </linearGradient>
+              </defs>
+              {/* Phone body with screen cutout */}
+              <rect width="310" height="640" rx="48" fill="url(#frameEdge)" mask="url(#screenMask)"/>
+              {/* Outer highlight */}
+              <rect x="0.5" y="0.5" width="309" height="639" rx="47.5" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="1"/>
+              {/* Inner bezel edge */}
+              <rect x="7.5" y="7.5" width="295" height="625" rx="40.5" fill="none" stroke="rgba(0,0,0,0.4)" strokeWidth="1"/>
+              {/* Side buttons */}
+              <rect x="-2" y="128" width="2.5" height="28" rx="1" fill="#2a2a2e"/>
+              <rect x="-2" y="172" width="2.5" height="42" rx="1" fill="#2a2a2e"/>
+              <rect x="-2" y="222" width="2.5" height="42" rx="1" fill="#2a2a2e"/>
+              <rect x="309.5" y="185" width="2.5" height="58" rx="1" fill="#2a2a2e"/>
+              {/* Dynamic Island */}
+              <rect x="109" y="18" width="92" height="28" rx="14" fill="#000"/>
+              <circle cx="174" cy="32" r="4.5" fill="#080810"/>
+              <circle cx="174" cy="32" r="3" fill="#0a0a18" opacity="0.8"/>
+              <circle cx="173" cy="31" r="1.2" fill="rgba(100,100,200,0.15)"/>
+              {/* Home indicator */}
+              <rect x="105" y="626" width="100" height="4" rx="2" fill="#000" opacity="0.2"/>
+            </svg>
+          </div>
+
+          <p style={{fontSize:10,color:"#86868B",margin:"14px 0 0",fontFamily:mono,textAlign:"center",lineHeight:1.5}}>
+            Content consumed via html2json service
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+</script>
+</body>
+</html>
