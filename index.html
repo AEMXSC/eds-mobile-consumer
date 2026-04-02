@@ -23,7 +23,7 @@
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const { useState, useCallback } = React;
+const { useState, useCallback, useEffect } = React;
 
 // ── URLs ─────────────────────────────────────────────────────────────────────
 const OFFERS_URL  = "https://main--courtneydemo--scdemos.aem.page/offers/account-offers.json";
@@ -72,11 +72,18 @@ const B = {
   gold:      "#c5a059",
   parchment: "#f5f2ed",
   ink:       "#1a1a1a",
-  dark:      "#162121",
   muted:     "#8b9a9a",
   serif:     "'EB Garamond',georgia,serif",
   sans:      "Montserrat,'Trebuchet MS',sans-serif",
 };
+const MONO = MONO;
+
+// ── Fetch with CORS proxy fallback ───────────────────────────────────────────
+async function tryFetch(url){
+  try{ const r=await fetch(url,{headers:{accept:"application/json"}}); if(r.ok) return {d:await r.json(),st:"live"}; }catch(_){}
+  for(const p of PROXIES){ try{ const r=await fetch(p(url)); if(r.ok) return {d:await r.json(),st:"proxy"}; }catch(_){} }
+  return null;
+}
 
 // ── html2json compact format helpers ─────────────────────────────────────────
 function strip(h){ return (h||"").replace(/<[^>]*>/g,"").replace(/&amp;/g,"&").replace(/&nbsp;/g," ").replace(/&ldquo;/g,'"').replace(/&rdquo;/g,'"').replace(/&rsquo;/g,"'").replace(/&#x([0-9a-fA-F]+);/g,(_,x)=>String.fromCharCode(parseInt(x,16))).replace(/&#([0-9]+);/g,(_,d)=>String.fromCharCode(+d)).trim(); }
@@ -172,7 +179,7 @@ function OfferCard({ row }){
             <span style={{fontSize:12,color:"#374151",lineHeight:1.45}}>{b}</span>
           </div>
         ))}
-        <div style={{marginTop:14,background:accent,color:"#fff",borderRadius:12,padding:"13px",textAlign:"center",fontSize:13,fontWeight:700,letterSpacing:".04em"}}>{cta}</div>
+        <button style={{marginTop:14,width:"100%",background:accent,color:"#fff",border:"none",borderRadius:12,padding:"13px",textAlign:"center",fontSize:13,fontWeight:700,letterSpacing:".04em",cursor:"pointer"}}>{cta}</button>
       </div>
     </div>
   );
@@ -184,10 +191,10 @@ function OffersPhone({ rows, active, onSelect, loading }){
     <div style={{height:"100%",display:"flex",flexDirection:"column"}}>
       {rows.length>1&&(
         <div style={{padding:"10px 12px 6px",borderBottom:"1px solid #F1F5F9",background:"#F8FAFC",flexShrink:0}}>
-          <p style={{fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",color:"#94A3B8",marginBottom:6,fontFamily:"'DM Mono',monospace"}}>Personalization engine picked:</p>
+          <p style={{fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",color:"#94A3B8",marginBottom:6,fontFamily:MONO}}>Personalization engine picked:</p>
           <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
             {rows.map((r,i)=>(
-              <button key={i} onClick={()=>onSelect(i)} style={{padding:"4px 10px",borderRadius:20,border:"none",cursor:"pointer",background:active===i?oAccent(r["Account Type"]):"#E2E8F0",color:active===i?"#fff":"#64748B",fontSize:10,fontWeight:700,fontFamily:"'DM Mono',monospace",transition:"all .15s"}}>{r.Title||`Offer ${i+1}`}</button>
+              <button key={i} onClick={()=>onSelect(i)} style={{padding:"4px 10px",borderRadius:20,border:"none",cursor:"pointer",background:active===i?oAccent(r["Account Type"]):"#E2E8F0",color:active===i?"#fff":"#64748B",fontSize:10,fontWeight:700,fontFamily:MONO,transition:"all .15s"}}>{r.Title||`Offer ${i+1}`}</button>
             ))}
           </div>
         </div>
@@ -269,7 +276,7 @@ function StatusBadge({ status }){
     error:  { bg:"rgba(239,68,68,.15)",   color:"#F87171", border:"rgba(248,113,113,.3)", label:"● fetch failed" },
   }[status]||{ bg:"transparent",color:"#94A3B8",border:"transparent",label:status };
   return(
-    <span style={{fontSize:10,fontFamily:"'DM Mono',monospace",fontWeight:700,padding:"4px 10px",borderRadius:6,letterSpacing:".05em",textTransform:"uppercase",background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.border}`}}>
+    <span style={{fontSize:10,fontFamily:MONO,fontWeight:700,padding:"4px 10px",borderRadius:6,letterSpacing:".05em",textTransform:"uppercase",background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.border}`}}>
       {cfg.label}
     </span>
   );
@@ -279,7 +286,11 @@ function StatusBadge({ status }){
 // PHONE WRAPPER (shared device frame)
 // ═══════════════════════════════════════════════════════════════════════════════
 function PhoneFrame({ children, statusBarBg }){
-  const [time, setTime] = useState(new Date().toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}));
+  const [time, setTime] = useState(()=>new Date().toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}));
+  useEffect(()=>{
+    const id = setInterval(()=>setTime(new Date().toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})),10000);
+    return ()=>clearInterval(id);
+  },[]);
   return(
     <div className="device-scaler-wrap">
       <div className="device-scaler">
@@ -332,15 +343,6 @@ function App(){
   const [pageRaw,    setPageRaw]    = useState(null);
   const [showPageRaw,setShowPageRaw]= useState(false);
 
-  const mono = "'DM Mono',monospace";
-
-  // ── fetch helpers ───────────────────────────────────────────────────────────
-  async function tryFetch(url){
-    try{ const r=await fetch(url,{headers:{accept:"application/json"}}); if(r.ok) return {d:await r.json(),st:"live"}; }catch(_){}
-    for(const p of PROXIES){ try{ const r=await fetch(p(url)); if(r.ok) return {d:await r.json(),st:"proxy"}; }catch(_){} }
-    return null;
-  }
-
   const fetchOffers = useCallback(async()=>{
     setOfferLoading(true);
     const res = await tryFetch(OFFERS_URL);
@@ -366,7 +368,6 @@ function App(){
 
   return(
     <div style={{minHeight:"100vh",background:"#ffffff",display:"flex",flexDirection:"column"}}>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
 
       {/* ── Header ── */}
       <div style={{padding:"14px 32px 0",borderBottom:"1px solid #E5E7EB",background:"#ffffff"}}>
@@ -383,7 +384,7 @@ function App(){
             </div>
             <div>
               <h1 style={{fontSize:16,fontWeight:800,letterSpacing:"-0.03em",color:"#111827",margin:0}}>EDS Headless Consumer</h1>
-              <p style={{fontSize:10,color:"#6B7280",margin:"2px 0 0",fontFamily:mono}}>Pages via html2json. Structured content via spreadsheet .json. One fetch call. No CFs. No GraphQL.</p>
+              <p style={{fontSize:10,color:"#6B7280",margin:"2px 0 0",fontFamily:MONO}}>Pages via html2json. Structured content via spreadsheet .json. One fetch call. No CFs. No GraphQL.</p>
             </div>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -411,7 +412,7 @@ function App(){
               fontFamily:"'DM Sans',sans-serif",textAlign:"left",transition:"all .15s",
             }}>
               <span style={{fontSize:12,fontWeight:700}}>{t.icon} {t.label}</span>
-              <span style={{display:"block",fontSize:9,color:tab===t.id?"#6B7280":"#9CA3AF",fontFamily:mono,marginTop:1}}>{t.sub}</span>
+              <span style={{display:"block",fontSize:9,color:tab===t.id?"#6B7280":"#9CA3AF",fontFamily:MONO,marginTop:1}}>{t.sub}</span>
             </button>
           ))}
         </div>
@@ -420,10 +421,10 @@ function App(){
       {/* ── URL bar ── */}
       <div style={{padding:"18px 32px",borderBottom:"1px solid #E5E7EB",background:"#F9FAFB"}}>
         <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-          <span style={{fontSize:10,fontWeight:800,textTransform:"uppercase",letterSpacing:".1em",color:"#D97706",background:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:5,padding:"3px 10px",flexShrink:0,fontFamily:mono}}>1 call</span>
-          <a href={fetchUrl} target="_blank" rel="noopener" style={{fontSize:16,fontFamily:mono,color:"#059669",fontWeight:600,textDecoration:"none",borderBottom:"2px solid #059669",lineHeight:1.5,wordBreak:"break-all"}} title="Open raw JSON in new tab">{fetchUrl}</a>
+          <span style={{fontSize:10,fontWeight:800,textTransform:"uppercase",letterSpacing:".1em",color:"#D97706",background:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:5,padding:"3px 10px",flexShrink:0,fontFamily:MONO}}>1 call</span>
+          <a href={fetchUrl} target="_blank" rel="noopener" style={{fontSize:16,fontFamily:MONO,color:"#059669",fontWeight:600,textDecoration:"none",borderBottom:"2px solid #059669",lineHeight:1.5,wordBreak:"break-all"}} title="Open raw JSON in new tab">{fetchUrl}</a>
         </div>
-        {ts&&<p style={{fontSize:10,color:"#9CA3AF",margin:"8px 0 0",fontFamily:mono}}>last fetch: {ts} — edit in DA, publish, hit Fetch ↑</p>}
+        {ts&&<p style={{fontSize:10,color:"#9CA3AF",margin:"8px 0 0",fontFamily:MONO}}>last fetch: {ts} — edit in DA, publish, hit Fetch ↑</p>}
       </div>
 
       {/* ── Body ── */}
@@ -436,7 +437,7 @@ function App(){
             <>
               {/* html2json story */}
               <div>
-                <p style={{fontSize:12,fontWeight:700,color:"#6B7280",margin:"0 0 10px",textTransform:"uppercase",letterSpacing:".08em",fontFamily:mono}}>How it works</p>
+                <p style={{fontSize:12,fontWeight:700,color:"#6B7280",margin:"0 0 10px",textTransform:"uppercase",letterSpacing:".08em",fontFamily:MONO}}>How it works</p>
                 {[
                   { n:"01", color:"#34D399", title:"Author a page in DA", body:"Content team writes the page as a document — headings, paragraphs, blocks. Publishes to the EDS CDN as HTML." },
                   { n:"02", color:"#60A5FA", title:"Append .json to any EDS page URL", body:`The html2json worker intercepts the request and converts the page's HTML into structured JSON — blocks, headings, sections — on the fly. No separate API to build.` },
@@ -444,7 +445,7 @@ function App(){
                 ].map((s,i)=>(
                   <div key={i} style={{display:"flex",gap:12,marginBottom:16}}>
                     <div style={{width:28,height:28,borderRadius:8,background:s.color+"22",border:`1px solid ${s.color}44`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:2}}>
-                      <span style={{fontSize:10,fontWeight:800,color:s.color,fontFamily:mono}}>{s.n}</span>
+                      <span style={{fontSize:10,fontWeight:800,color:s.color,fontFamily:MONO}}>{s.n}</span>
                     </div>
                     <div>
                       <p style={{fontSize:13,fontWeight:700,color:"#111827",margin:0}}>{s.title}</p>
@@ -456,9 +457,9 @@ function App(){
 
               {/* The fetch */}
               <div>
-                <p style={{fontSize:12,fontWeight:700,color:"#6B7280",margin:"0 0 8px",textTransform:"uppercase",letterSpacing:".08em",fontFamily:mono}}>The integration</p>
+                <p style={{fontSize:12,fontWeight:700,color:"#6B7280",margin:"0 0 8px",textTransform:"uppercase",letterSpacing:".08em",fontFamily:MONO}}>The integration</p>
                 <div style={{background:"#0D1117",borderRadius:12,padding:"16px 18px",border:"1px solid rgba(255,255,255,.06)"}}>
-                  <pre style={{margin:0,fontSize:12,lineHeight:1.8,fontFamily:mono,whiteSpace:"pre-wrap",wordBreak:"break-all"}}>
+                  <pre style={{margin:0,fontSize:12,lineHeight:1.8,fontFamily:MONO,whiteSpace:"pre-wrap",wordBreak:"break-all"}}>
                     <span style={{color:"#FF7B72"}}>const </span>
                     <span style={{color:"#79C0FF"}}>{"{ content }"}</span>
                     <span style={{color:"#C9D1D9"}}> = </span>
@@ -474,16 +475,16 @@ function App(){
 
               {/* vs AEM CS */}
               <div>
-                <p style={{fontSize:12,fontWeight:700,color:"#6B7280",margin:"0 0 8px",textTransform:"uppercase",letterSpacing:".08em",fontFamily:mono}}>vs AEM CS Content Fragments</p>
+                <p style={{fontSize:12,fontWeight:700,color:"#6B7280",margin:"0 0 8px",textTransform:"uppercase",letterSpacing:".08em",fontFamily:MONO}}>vs AEM CS Content Fragments</p>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                   {[
                     { label:"EDS + html2json", lines:"1 line", color:"#34D399", items:["✓ Any EDS page URL + .json","✓ No CF model to define","✓ No persisted query","✓ No auth token","✓ Author in DA as a document"] },
                     { label:"AEM CS + GraphQL", lines:"~20 lines + setup", color:"#F87171", items:["✗ Define CF model first","✗ Create fragments in DAM","✗ Register persisted query","✗ Bearer auth token","✗ Separate from page authoring"] },
                   ].map((col,i)=>(
                     <div key={i} style={{background:"#0D1117",borderRadius:10,padding:"12px 14px",border:`1px solid ${col.color}22`}}>
-                      <p style={{fontSize:10,fontWeight:800,color:col.color,margin:"0 0 4px",fontFamily:mono,textTransform:"uppercase",letterSpacing:".06em"}}>{col.label}</p>
-                      <p style={{fontSize:9,color:"#475569",margin:"0 0 10px",fontFamily:mono}}>{col.lines}</p>
-                      {col.items.map((it,ii)=><p key={ii} style={{fontSize:10.5,color:i===0?"#94A3B8":"#475569",margin:"3px 0",fontFamily:mono}}>{it}</p>)}
+                      <p style={{fontSize:10,fontWeight:800,color:col.color,margin:"0 0 4px",fontFamily:MONO,textTransform:"uppercase",letterSpacing:".06em"}}>{col.label}</p>
+                      <p style={{fontSize:9,color:"#475569",margin:"0 0 10px",fontFamily:MONO}}>{col.lines}</p>
+                      {col.items.map((it,ii)=><p key={ii} style={{fontSize:10.5,color:i===0?"#94A3B8":"#475569",margin:"3px 0",fontFamily:MONO}}>{it}</p>)}
                     </div>
                   ))}
                 </div>
@@ -492,10 +493,10 @@ function App(){
               {/* Raw JSON */}
               {pageRaw&&(
                 <div>
-                  <button onClick={()=>setShowPageRaw(!showPageRaw)} style={{background:"#F3F4F6",border:"1px solid #E5E7EB",borderRadius:8,padding:"6px 14px",fontSize:11,fontWeight:600,cursor:"pointer",color:"#6B7280",fontFamily:mono}}>
+                  <button onClick={()=>setShowPageRaw(!showPageRaw)} style={{background:"#F3F4F6",border:"1px solid #E5E7EB",borderRadius:8,padding:"6px 14px",fontSize:11,fontWeight:600,cursor:"pointer",color:"#6B7280",fontFamily:MONO}}>
                     {showPageRaw?"▲ hide":"▼ show"} raw JSON response
                   </button>
-                  {showPageRaw&&<pre style={{background:"#0D1117",color:"#64748B",borderRadius:12,padding:14,marginTop:10,fontSize:10,fontFamily:mono,overflow:"auto",maxHeight:260,lineHeight:1.5,whiteSpace:"pre-wrap",wordBreak:"break-word",border:"1px solid rgba(255,255,255,.06)"}}>{JSON.stringify(pageRaw,null,2)}</pre>}
+                  {showPageRaw&&<pre style={{background:"#0D1117",color:"#64748B",borderRadius:12,padding:14,marginTop:10,fontSize:10,fontFamily:MONO,overflow:"auto",maxHeight:260,lineHeight:1.5,whiteSpace:"pre-wrap",wordBreak:"break-word",border:"1px solid rgba(255,255,255,.06)"}}>{JSON.stringify(pageRaw,null,2)}</pre>}
                 </div>
               )}
             </>
@@ -504,11 +505,11 @@ function App(){
               {/* Offers story — unchanged */}
               <div>
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-                  <span style={{background:"#ECFDF5",color:"#059669",fontSize:9,fontWeight:800,padding:"2px 8px",borderRadius:4,fontFamily:mono,letterSpacing:".06em"}}>STEP 1</span>
+                  <span style={{background:"#ECFDF5",color:"#059669",fontSize:9,fontWeight:800,padding:"2px 8px",borderRadius:4,fontFamily:MONO,letterSpacing:".06em"}}>STEP 1</span>
                   <span style={{fontSize:14,fontWeight:700,color:"#111827"}}>One fetch call. That's the integration.</span>
                 </div>
                 <div style={{background:"#0D1117",borderRadius:12,padding:"16px 18px",border:"1px solid rgba(255,255,255,.06)"}}>
-                  <pre style={{margin:0,fontSize:12,lineHeight:1.8,fontFamily:mono,whiteSpace:"pre-wrap",wordBreak:"break-all"}}>
+                  <pre style={{margin:0,fontSize:12,lineHeight:1.8,fontFamily:MONO,whiteSpace:"pre-wrap",wordBreak:"break-all"}}>
                     <span style={{color:"#FF7B72"}}>const </span><span style={{color:"#79C0FF"}}>{"{ data }"}</span>
                     <span style={{color:"#C9D1D9"}}> = </span><span style={{color:"#FF7B72"}}>await </span>
                     <span style={{color:"#D2A8FF"}}>fetch</span><span style={{color:"#C9D1D9"}}>(</span>
@@ -521,11 +522,11 @@ function App(){
 
               <div>
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-                  <span style={{background:"#EFF6FF",color:"#2563EB",fontSize:9,fontWeight:800,padding:"2px 8px",borderRadius:4,fontFamily:mono,letterSpacing:".06em"}}>STEP 2</span>
+                  <span style={{background:"#EFF6FF",color:"#2563EB",fontSize:9,fontWeight:800,padding:"2px 8px",borderRadius:4,fontFamily:MONO,letterSpacing:".06em"}}>STEP 2</span>
                   <span style={{fontSize:14,fontWeight:700,color:"#111827"}}>One row = one Content Fragment. Already structured.</span>
                 </div>
                 <div style={{background:"#0D1117",borderRadius:12,padding:"16px 18px",border:"1px solid rgba(255,255,255,.06)"}}>
-                  <pre style={{margin:0,fontSize:11.5,lineHeight:1.7,fontFamily:mono,whiteSpace:"pre-wrap"}}>
+                  <pre style={{margin:0,fontSize:11.5,lineHeight:1.7,fontFamily:MONO,whiteSpace:"pre-wrap"}}>
                     <span style={{color:"#8B949E"}}>{"// data[0]:\n"}</span>
                     <span style={{color:"#C9D1D9"}}>{"{\n"}</span>
                     {Object.entries(offerRows[activeOffer]||offerRows[0]).slice(0,6).map(([k,v])=>(
@@ -543,7 +544,7 @@ function App(){
 
               <div>
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-                  <span style={{background:"#FFFBEB",color:"#D97706",fontSize:9,fontWeight:800,padding:"2px 8px",borderRadius:4,fontFamily:mono,letterSpacing:".06em"}}>STEP 3</span>
+                  <span style={{background:"#FFFBEB",color:"#D97706",fontSize:9,fontWeight:800,padding:"2px 8px",borderRadius:4,fontFamily:MONO,letterSpacing:".06em"}}>STEP 3</span>
                   <span style={{fontSize:14,fontWeight:700,color:"#111827"}}>Edit in DA → publish → hit Fetch. Updates everywhere.</span>
                 </div>
                 <div style={{background:"#0D1117",borderRadius:12,padding:"16px 18px",border:"1px solid rgba(255,255,255,.06)",display:"flex",flexDirection:"column",gap:12}}>
@@ -556,7 +557,7 @@ function App(){
                       <span style={{fontSize:18,flexShrink:0}}>{s.icon}</span>
                       <div>
                         <p style={{fontSize:13,fontWeight:700,color:"#111827",margin:0}}>{s.label}</p>
-                        <p style={{fontSize:11,color:"#6B7280",margin:"2px 0 0",lineHeight:1.4,fontFamily:mono}}>{s.sub}</p>
+                        <p style={{fontSize:11,color:"#6B7280",margin:"2px 0 0",lineHeight:1.4,fontFamily:MONO}}>{s.sub}</p>
                       </div>
                     </div>
                   ))}
@@ -565,10 +566,10 @@ function App(){
 
               {offerRaw&&(
                 <div>
-                  <button onClick={()=>setShowOfferRaw(!showOfferRaw)} style={{background:"#F3F4F6",border:"1px solid #E5E7EB",borderRadius:8,padding:"6px 14px",fontSize:11,fontWeight:600,cursor:"pointer",color:"#6B7280",fontFamily:mono}}>
+                  <button onClick={()=>setShowOfferRaw(!showOfferRaw)} style={{background:"#F3F4F6",border:"1px solid #E5E7EB",borderRadius:8,padding:"6px 14px",fontSize:11,fontWeight:600,cursor:"pointer",color:"#6B7280",fontFamily:MONO}}>
                     {showOfferRaw?"▲ hide":"▼ show"} raw JSON response
                   </button>
-                  {showOfferRaw&&<pre style={{background:"#0D1117",color:"#64748B",borderRadius:12,padding:14,marginTop:10,fontSize:10,fontFamily:mono,overflow:"auto",maxHeight:260,lineHeight:1.5,whiteSpace:"pre-wrap",wordBreak:"break-word",border:"1px solid rgba(255,255,255,.06)"}}>{JSON.stringify(offerRaw,null,2)}</pre>}
+                  {showOfferRaw&&<pre style={{background:"#0D1117",color:"#64748B",borderRadius:12,padding:14,marginTop:10,fontSize:10,fontFamily:MONO,overflow:"auto",maxHeight:260,lineHeight:1.5,whiteSpace:"pre-wrap",wordBreak:"break-word",border:"1px solid rgba(255,255,255,.06)"}}>{JSON.stringify(offerRaw,null,2)}</pre>}
                 </div>
               )}
             </>
@@ -583,7 +584,7 @@ function App(){
               : <OffersPhone rows={offerRows} active={activeOffer} onSelect={setActiveOffer} loading={offerLoading}/>
             }
           </PhoneFrame>
-          <p style={{fontSize:9.5,color:"#9CA3AF",margin:"12px 0 0",fontFamily:mono,textAlign:"center",lineHeight:1.6}}>
+          <p style={{fontSize:9.5,color:"#9CA3AF",margin:"12px 0 0",fontFamily:MONO,textAlign:"center",lineHeight:1.6}}>
             {tab==="page"
               ? `courtneydemo homepage · html2json${pageTs?` · ${pageTs}`:""}`
               : `${offerRows.length} offers · DA spreadsheet${offerTs?` · ${offerTs}`:""}`
