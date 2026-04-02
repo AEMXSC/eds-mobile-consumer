@@ -5,12 +5,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>EDS → Mobile Consumer | AEM XSC Demo Tool</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&family=Montserrat:wght@400;500;600;700&family=EB+Garamond:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/marvelapp/devices.css@master/assets/devices.min.css">
 <style>
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
   html,body,#root{height:100%}
   body{font-family:'DM Sans',-apple-system,sans-serif;background:#F5F5F7;color:#1D1D1F}
   @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+  /* Override devices.css screen overflow so content scrolls */
+  .marvel-device .screen{overflow-y:auto !important;background:#f5f2ed !important}
+  /* Scale wrapper so natural 375×812 device fits the panel */
+  .device-scaler{transform:scale(0.78);transform-origin:top center}
+  /* Compensate layout for the scaled-away space */
+  .device-scaler-wrap{height:634px;overflow:hidden;display:flex;justify-content:center}
 </style>
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
@@ -19,146 +27,458 @@
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const { useState, useCallback } = React;
+const { useState, useCallback, useEffect } = React;
 
 const SVC = "https://mhast-html-to-json.adobeaem.workers.dev";
 const PROXIES = [
   u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
   u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
 ];
-const PRESETS = [
-  { id:"court", label:"courtneydemo", url:`${SVC}/scdemos/courtneydemo/?compact=true&head=false` },
-  { id:"bbird", label:"bbird demo",   url:`${SVC}/scdemos/demo/?compact=true&head=false` },
-  { id:"xsc",   label:"xscteamsite",  url:`${SVC}/aemxsc/xscteamsite/?compact=true&head=false` },
-];
-const SAMPLE = { sections:[
-  { t:"hero", title:"The Science of Wealth Preservation.", sub:"Guided Path to Financial Independence", img:"https://demo.bbird.live/media_1f8d434868eabca293e9c9463b6d640273794af1b.png?width=750&format=png&optimize=medium" },
-  { t:"text", h:"The Idea", b:"The concept of Financial Independence is rooted in a simple principle: building enough assets so that your investments can support your lifestyle. Popularized by the FIRE movement, this approach emphasizes disciplined saving, thoughtful spending, and long-term investing." },
-  { t:"text", h:"Why This Exists", b:"This project was inspired by financial independence communities, where the real insight goes beyond saving and investing to the discipline and mindset behind long-term stability." },
-  { t:"cta", text:"Build your FIRE plan step by step", btn:"Get Started" },
-  { t:"cards", items:[
-    { title:"Start Here", desc:"Take the 5-minute quiz and get your personal FIRE plan.", img:"https://demo.bbird.live/media_18aff15c495acc2d64c7da01d6988fe979c38926d.png?width=750&format=png&optimize=medium" },
-    { title:"Financial Independence", desc:"Learn the core idea, the simple math, and the path forward.", img:"https://demo.bbird.live/media_1e23036ffb279f53a8b7b1f8c4ebd6f533afa5792.jpg?width=750&format=jpg&optimize=medium" },
-    { title:"Budgeting Basics", desc:"Build a simple plan for spending, saving, and goals.", img:"https://demo.bbird.live/media_15fbb4d6f12f757450f8c32ad50a11895bf60fcf0.jpg?width=750&format=jpg&optimize=medium" },
-    { title:"Tools & Calculators", desc:"Run the numbers on savings rate, net worth, and growth.", img:"https://demo.bbird.live/media_10ab33f7c7110ea4c2fb0b05ee2edd3a656bd6f9d.jpg?width=750&format=jpg&optimize=medium" },
-  ]},
-]};
 
+const PRESETS = [
+  {
+    id: "offers",
+    label: "Account Offers",
+    url: "https://main--courtneydemo--scdemos.aem.live/offers/account-offers.json",
+    mode: "sheet",
+  },
+  {
+    id: "courtney",
+    label: "courtneydemo",
+    url: `${SVC}/scdemos/courtneydemo/?compact=true&head=false`,
+    mode: "page",
+  },
+  {
+    id: "xsc",
+    label: "xscteamsite",
+    url: `${SVC}/aemxsc/xscteamsite/?compact=true&head=false`,
+    mode: "page",
+  },
+];
+
+/* ---- Fallback data ---- */
+const SAMPLE_SHEET = {
+  mode: "sheet",
+  rows: [
+    { "Title": "Max Rate Checking Account", "Offer": "Earn 2.00% APY plus get $300 when you open and fund a new account", "Details": "No monthly fees with $1,500 minimum balance. Free ATM withdrawals nationwide. Mobile deposit available. FDIC insured up to $250,000", "CTA Label": "Open Account", "Account Type": "Checking" },
+    { "Title": "Premium Savings Account", "Offer": "4.25% APY on all balances over $10,000", "Details": "No minimum to open. Automatic round-up savings. Competitive rates guaranteed for 12 months. FDIC insured up to $250,000", "CTA Label": "Start Saving", "Account Type": "Savings" },
+    { "Title": "Cash Rewards Mastercard", "Offer": "Unlimited 2% cash back on every purchase, every day", "Details": "No annual fee. 0% intro APR for 15 months. No foreign transaction fees. Fraud protection included", "CTA Label": "Apply Now", "Account Type": "Credit" },
+    { "Title": "Student Checking Account", "Offer": "No monthly fees for students under 25 — guaranteed", "Details": "Free first order of checks. No overdraft fees on first 3 occurrences. Campus ATM network access. Mobile banking with Zelle", "CTA Label": "Open Free Account", "Account Type": "Checking" },
+  ],
+};
+
+const SAMPLE_PAGE = {
+  mode: "page",
+  sections: [
+    { t:"hero", title:"The Science of Wealth Preservation.", sub:"Guided Path to Financial Independence", img:"https://demo.bbird.live/media_1f8d434868eabca293e9c9463b6d640273794af1b.png?width=750&format=png&optimize=medium" },
+    { t:"text", h:"The Idea", b:"The concept of Financial Independence is rooted in a simple principle: building enough assets so that your investments can support your lifestyle. Popularized by the FIRE movement, this approach emphasizes disciplined saving, thoughtful spending, and long-term investing." },
+    { t:"text", h:"Why This Exists", b:"This project was inspired by financial independence communities, where the real insight goes beyond saving and investing to the discipline and mindset behind long-term stability." },
+    { t:"cta", text:"Build your FIRE plan step by step", btn:"Get Started" },
+    { t:"cards", items:[
+      { title:"Start Here", desc:"Take the 5-minute quiz and get your personal FIRE plan.", img:"https://demo.bbird.live/media_18aff15c495acc2d64c7da01d6988fe979c38926d.png?width=750&format=png&optimize=medium" },
+      { title:"Financial Independence", desc:"Learn the core idea, the simple math, and the path forward.", img:"https://demo.bbird.live/media_1e23036ffb279f53a8b7b1f8c4ebd6f533afa5792.jpg?width=750&format=jpg&optimize=medium" },
+      { title:"Budgeting Basics", desc:"Build a simple plan for spending, saving, and goals.", img:"https://demo.bbird.live/media_15fbb4d6f12f757450f8c32ad50a11895bf60fcf0.jpg?width=750&format=jpg&optimize=medium" },
+      { title:"Tools & Calculators", desc:"Run the numbers on savings rate, net worth, and growth.", img:"https://demo.bbird.live/media_10ab33f7c7110ea4c2fb0b05ee2edd3a656bd6f9d.jpg?width=750&format=jpg&optimize=medium" },
+    ]},
+  ],
+};
+
+/* ---- Helpers ---- */
 function strip(h){ return (h||"").replace(/<[^>]*>/g,"").replace(/&amp;/g,"&").replace(/&nbsp;/g," ").trim(); }
 
-function parseResponse(data){
-  const body = data?.body||data?.content||data;
-  const items = Array.isArray(body)?body:body?.children||body?.items||[];
-  const s=[];let hero=false;
-  items.forEach(it=>{
-    if(!hero&&it.tag==="h1"){s.push({t:"hero",title:strip(it.innerHTML),sub:"",img:null});hero=true;}
-    else if(it.tag==="h1"||it.tag==="h2") s.push({t:"text",h:strip(it.innerHTML),b:""});
-    else if(it.tag==="p"&&s.length){const l=s[s.length-1];const k=l.t==="hero"?"sub":"b";l[k]=((l[k]||"")+" "+strip(it.innerHTML)).trim();}
-    else if(it.name||it.blockName||it.type==="block"){
-      const nm=it.name||it.blockName||"";const ch=it.children||it.rows||[];
-      if(nm==="cards"||nm==="columns"){
-        const ci=ch.map(r=>{const c=r.columns||r.children||[];return{title:strip(c[0]?.innerHTML||""),desc:strip(c[1]?.innerHTML||""),img:null};}).filter(x=>x.title);
-        if(ci.length) s.push({t:"cards",items:ci});
-      } else s.push({t:"block",name:nm});
+function flattenHtml2Json(data) {
+  // Format 1: body.children (standard html2json)
+  if (data?.body?.children) return data.body.children;
+  // Format 2: content[].section[][] (compact html2json)
+  if (Array.isArray(data?.content)) {
+    const items = [];
+    for (const sec of data.content) {
+      if (Array.isArray(sec?.section)) {
+        for (const row of sec.section) {
+          if (Array.isArray(row)) items.push(...row.filter(Boolean));
+          else if (row) items.push(row);
+        }
+      } else if (sec?.tag || sec?.name || sec?.type) {
+        items.push(sec);
+      }
     }
-  });
-  return {sections:s.length?s:SAMPLE.sections};
+    return items;
+  }
+  if (Array.isArray(data)) return data;
+  return [];
 }
 
-/* ---- iOS content renderer ---- */
-function PhoneUI({content,ts,loading}){
-  const sf="'SF Pro Display',-apple-system,'Helvetica Neue',sans-serif";
-  if(loading) return(
-    <div style={{padding:"100px 20px",textAlign:"center",fontFamily:sf}}>
-      <div style={{width:28,height:28,border:"3px solid #E5E5EA",borderTopColor:"#007AFF",borderRadius:"50%",animation:"spin .7s linear infinite",margin:"0 auto 14px"}}/>
-      <p style={{fontSize:13,color:"#8E8E93"}}>Fetching from DA&hellip;</p>
+function buildSections(items) {
+  const s = []; let hero = false;
+  items.forEach(it => {
+    if (!it) return;
+    const tag = it.tag || it.type || "";
+    const name = (it.name || it.blockName || "").toLowerCase();
+    if (!hero && (tag === "h1" || it.headingLevel === 1)) {
+      s.push({ t:"hero", title:strip(it.innerHTML||it.text||""), sub:"", img:null });
+      hero = true;
+    } else if (tag === "h1" || tag === "h2" || it.headingLevel <= 2) {
+      s.push({ t:"text", h:strip(it.innerHTML||it.text||""), b:"" });
+    } else if ((tag === "p" || tag === "paragraph") && s.length) {
+      const l = s[s.length - 1];
+      const key = l.t === "hero" ? "sub" : "b";
+      l[key] = ((l[key]||"") + " " + strip(it.innerHTML||it.text||"")).trim();
+    } else if (tag === "img" && s.length && s[s.length-1].t === "hero") {
+      s[s.length-1].img = it.src || it.href || null;
+    } else if (name === "cards" || name === "columns") {
+      const ch = it.children || it.rows || [];
+      const ci = ch.map(r => {
+        const c = r.columns || r.children || r || [];
+        return { title:strip(c[0]?.innerHTML||""), desc:strip(c[1]?.innerHTML||""), img:null };
+      }).filter(x => x.title);
+      if (ci.length) s.push({ t:"cards", items:ci });
+    } else if (name && name !== "section-metadata" && name !== "metadata") {
+      // unknown block — show as a placeholder
+      s.push({ t:"block", name });
+    }
+  });
+  return s;
+}
+
+function parseResponse(data, hintMode) {
+  // Sheet mode: EDS spreadsheet JSON
+  if (hintMode === "sheet" || (data?.data && Array.isArray(data.data))) {
+    if (data?.data?.length) return { mode:"sheet", rows:data.data };
+    return SAMPLE_SHEET;
+  }
+  // Page mode
+  const items = flattenHtml2Json(data);
+  const sections = buildSections(items);
+  return { mode:"page", sections: sections.length ? sections : SAMPLE_PAGE.sections };
+}
+
+/* ---- Badge colors by account type ---- */
+function badgeStyle(type) {
+  const t = (type||"").toLowerCase();
+  if (t === "checking") return { bg:"#a14f2b", text:"#fff" };
+  if (t === "savings")  return { bg:"#c5a059", text:"#1a1a1a" };
+  if (t === "credit")   return { bg:"#162121", text:"#c5a059" };
+  return { bg:"#1a1a1a", text:"#f5f2ed" };
+}
+
+/* ---- Offer Card (sheet mode) ---- */
+function OfferCard({ row }) {
+  const type    = row["Account Type"] || row["Type"] || row["type"] || "";
+  const title   = row["Title"]  || row["title"]  || row["name"] || "";
+  const offer   = row["Offer"]  || row["offer"]  || row["Description"] || row["description"] || "";
+  const details = row["Details"]|| row["details"]|| row["Body"] || "";
+  const cta     = row["CTA Label"]||row["CTA"]||row["cta"]||"Learn More";
+  const badge   = badgeStyle(type);
+
+  const points = details
+    ? details.split(/\.\s+/).map(p => p.replace(/\.$/, "").trim()).filter(Boolean)
+    : [];
+
+  const mono = "'DM Mono',monospace";
+  const serif = "'EB Garamond',georgia,serif";
+  const sans  = "Montserrat,sans-serif";
+
+  return (
+    <div style={{
+      background:"#fff",
+      borderRadius:24,
+      margin:"16px 14px",
+      boxShadow:"0 20px 40px -8px rgba(0,0,0,0.15), 0 4px 12px -2px rgba(0,0,0,0.08)",
+      overflow:"hidden",
+      fontFamily:sans,
+    }}>
+      {/* Header band */}
+      <div style={{
+        background:"linear-gradient(135deg,#a14f2b 0%,#c5a059 100%)",
+        padding:"12px 16px",
+        display:"flex",
+        justifyContent:"space-between",
+        alignItems:"center",
+      }}>
+        {type && (
+          <span style={{
+            background:badge.bg, color:badge.text,
+            fontSize:9, fontWeight:700, textTransform:"uppercase",
+            letterSpacing:"0.1em", padding:"3px 10px", borderRadius:20,
+          }}>{type}</span>
+        )}
+        <span style={{color:"rgba(255,255,255,0.65)",fontSize:11,marginLeft:"auto"}}>
+          ★★★★★
+        </span>
+      </div>
+
+      {/* Title */}
+      <div style={{padding:"16px 16px 0"}}>
+        <h2 style={{
+          fontFamily:serif,
+          fontSize:19, fontWeight:600, color:"#1a1a1a",
+          margin:0, lineHeight:1.2,
+        }}>{title}</h2>
+      </div>
+
+      {/* Offer callout */}
+      {offer && (
+        <div style={{
+          margin:"12px 16px",
+          background:"#f5f2ed",
+          borderLeft:"3px solid #a14f2b",
+          borderRadius:"0 10px 10px 0",
+          padding:"10px 12px",
+        }}>
+          <p style={{margin:0,fontSize:13,fontWeight:600,color:"#a14f2b",lineHeight:1.45}}>
+            {offer}
+          </p>
+        </div>
+      )}
+
+      {/* Details bullet points */}
+      {points.length > 0 && (
+        <div style={{padding:"0 16px 8px"}}>
+          {points.map((pt,i) => (
+            <div key={i} style={{display:"flex",gap:8,alignItems:"flex-start",marginBottom:7}}>
+              <span style={{color:"#c5a059",fontWeight:700,flexShrink:0,marginTop:1,fontSize:13}}>✓</span>
+              <span style={{fontSize:11.5,color:"#3a3a3a",lineHeight:1.45}}>{pt}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* CTA button */}
+      <div style={{padding:"10px 16px 18px"}}>
+        <div style={{
+          background:"linear-gradient(135deg,#a14f2b 0%,#c5a059 100%)",
+          color:"#fff", borderRadius:12, padding:"12px",
+          textAlign:"center", fontSize:12, fontWeight:700,
+          letterSpacing:"0.08em", textTransform:"uppercase",
+          cursor:"pointer",
+        }}>{cta}</div>
+      </div>
     </div>
   );
-  if(!content) return <div style={{padding:"100px 20px",textAlign:"center",fontFamily:sf}}><p style={{fontSize:13,color:"#8E8E93"}}>Enter a URL and hit Fetch</p></div>;
-  return(
-    <div style={{fontFamily:sf}}>
-      {content.sections.map((s,i)=>{
-        if(s.t==="hero") return(
-          <div key={i} style={{position:"relative",marginBottom:18}}>
-            {s.img&&<img src={s.img} alt="" style={{width:"100%",height:170,objectFit:"cover"}}/>}
-            <div style={{padding:s.img?"14px 18px":"28px 18px 14px",background:s.img?"linear-gradient(transparent,rgba(0,0,0,.75))":"none",position:s.img?"absolute":"relative",bottom:0,left:0,right:0}}>
-              {s.sub&&<p style={{fontSize:10,fontWeight:500,textTransform:"uppercase",letterSpacing:".08em",color:s.img?"rgba(255,255,255,.7)":"#8E8E93",margin:"0 0 3px"}}>{s.sub}</p>}
-              <h1 style={{fontSize:20,fontWeight:700,color:s.img?"#fff":"#000",margin:0,lineHeight:1.2}}>{s.title}</h1>
+}
+
+/* ---- Row selector (sheet mode personalization bar) ---- */
+function RowSelector({ rows, active, onSelect }) {
+  const sans = "Montserrat,sans-serif";
+  return (
+    <div style={{
+      padding:"8px 12px 6px",
+      display:"flex", gap:5, overflowX:"auto", flexShrink:0,
+      background:"#f5f2ed",
+      borderBottom:"1px solid rgba(161,79,43,0.18)",
+    }}>
+      {rows.map((row,i) => (
+        <button key={i} onClick={() => onSelect(i)} style={{
+          flexShrink:0,
+          padding:"4px 10px", borderRadius:20, border:"none",
+          background: active===i ? "#a14f2b" : "rgba(161,79,43,0.12)",
+          color: active===i ? "#fff" : "#a14f2b",
+          fontSize:9, fontWeight:700, cursor:"pointer",
+          fontFamily:sans, textTransform:"uppercase", letterSpacing:"0.06em",
+          transition:"all .15s",
+        }}>
+          {row["Account Type"]||row["Title"]||`Offer ${i+1}`}
+        </button>
+      ))}
+      <span style={{
+        fontSize:8, color:"rgba(161,79,43,0.6)", alignSelf:"center",
+        marginLeft:4, fontFamily:sans, whiteSpace:"nowrap",
+      }}>
+        ↕ simulates personalization
+      </span>
+    </div>
+  );
+}
+
+/* ---- Page content renderer (html2json mode) ---- */
+function PageUI({ sections, loading }) {
+  const sf = "'SF Pro Display',-apple-system,'Helvetica Neue',sans-serif";
+  if (loading) return (
+    <div style={{padding:"80px 20px",textAlign:"center",fontFamily:sf}}>
+      <div style={{width:26,height:26,border:"3px solid #e8e0d8",borderTopColor:"#a14f2b",borderRadius:"50%",animation:"spin .7s linear infinite",margin:"0 auto 12px"}}/>
+      <p style={{fontSize:12,color:"#8a7a6e"}}>Fetching from DA…</p>
+    </div>
+  );
+  if (!sections?.length) return (
+    <div style={{padding:"80px 20px",textAlign:"center",fontFamily:sf}}>
+      <p style={{fontSize:12,color:"#8a7a6e"}}>Enter a URL and hit Fetch</p>
+    </div>
+  );
+  return (
+    <div style={{fontFamily:sf,paddingBottom:24}}>
+      {sections.map((s,i) => {
+        if (s.t==="hero") return (
+          <div key={i} style={{position:"relative",marginBottom:16}}>
+            {s.img && <img src={s.img} alt="" style={{width:"100%",height:165,objectFit:"cover"}}/>}
+            <div style={{
+              padding:s.img?"14px 18px":"28px 18px 14px",
+              background:s.img?"linear-gradient(transparent,rgba(26,26,26,.8))":"none",
+              position:s.img?"absolute":"relative",bottom:0,left:0,right:0,
+            }}>
+              {s.sub && <p style={{fontSize:10,fontWeight:500,textTransform:"uppercase",letterSpacing:".08em",color:s.img?"rgba(245,242,237,.7)":"#8a7a6e",margin:"0 0 4px"}}>{s.sub}</p>}
+              <h1 style={{fontSize:19,fontWeight:700,color:s.img?"#f5f2ed":"#1a1a1a",margin:0,lineHeight:1.2,fontFamily:"'EB Garamond',georgia,serif"}}>{s.title}</h1>
             </div>
           </div>
         );
-        if(s.t==="text") return(
-          <div key={i} style={{padding:"0 18px",marginBottom:14}}>
-            {s.h&&<h2 style={{fontSize:15,fontWeight:700,color:"#000",margin:"0 0 4px"}}>{s.h}</h2>}
-            {s.b&&<p style={{fontSize:12.5,color:"#3C3C43",lineHeight:1.5,margin:0}}>{s.b}</p>}
-          </div>
-        );
-        if(s.t==="cta") return(
-          <div key={i} style={{padding:"4px 18px",marginBottom:14,textAlign:"center"}}>
-            <p style={{fontSize:13,color:"#3C3C43",margin:"0 0 8px",fontWeight:500}}>{s.text}</p>
-            <div style={{background:"#007AFF",color:"#fff",borderRadius:12,padding:"10px 22px",fontSize:14,fontWeight:600,display:"inline-block"}}>{s.btn}</div>
-          </div>
-        );
-        if(s.t==="cards") return(
+        if (s.t==="text") return (
           <div key={i} style={{padding:"0 18px",marginBottom:12}}>
-            {s.items.map((c,ci)=>(
-              <div key={ci} style={{display:"flex",gap:10,alignItems:"center",padding:"10px 0",borderBottom:ci<s.items.length-1?"1px solid #E5E5EA":"none"}}>
-                {c.img?<img src={c.img} alt="" style={{width:48,height:48,borderRadius:11,objectFit:"cover",flexShrink:0}}/>:
-                <div style={{width:48,height:48,borderRadius:11,background:"#F2F2F7",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:18}}>☕</span></div>}
+            {s.h && <h2 style={{fontSize:15,fontWeight:700,color:"#1a1a1a",margin:"0 0 4px",fontFamily:"'EB Garamond',georgia,serif"}}>{s.h}</h2>}
+            {s.b && <p style={{fontSize:12,color:"#4a3a2e",lineHeight:1.6,margin:0}}>{s.b}</p>}
+          </div>
+        );
+        if (s.t==="cta") return (
+          <div key={i} style={{padding:"4px 18px",marginBottom:14,textAlign:"center"}}>
+            <p style={{fontSize:13,color:"#4a3a2e",margin:"0 0 10px",fontWeight:500}}>{s.text}</p>
+            <div style={{background:"linear-gradient(135deg,#a14f2b 0%,#c5a059 100%)",color:"#fff",borderRadius:12,padding:"11px 22px",fontSize:13,fontWeight:700,display:"inline-block",letterSpacing:"0.04em"}}>{s.btn}</div>
+          </div>
+        );
+        if (s.t==="cards") return (
+          <div key={i} style={{padding:"0 18px",marginBottom:12}}>
+            {s.items.map((c,ci) => (
+              <div key={ci} style={{display:"flex",gap:10,alignItems:"center",padding:"10px 0",borderBottom:ci<s.items.length-1?"1px solid rgba(197,160,89,0.25)":"none"}}>
+                {c.img
+                  ? <img src={c.img} alt="" style={{width:46,height:46,borderRadius:10,objectFit:"cover",flexShrink:0}}/>
+                  : <div style={{width:46,height:46,borderRadius:10,background:"rgba(161,79,43,0.1)",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:16}}>☕</span></div>
+                }
                 <div style={{flex:1,minWidth:0}}>
-                  <p style={{fontSize:13.5,fontWeight:600,color:"#000",margin:0}}>{c.title}</p>
-                  <p style={{fontSize:11,color:"#8E8E93",margin:"1px 0 0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.desc}</p>
+                  <p style={{fontSize:13,fontWeight:600,color:"#1a1a1a",margin:0,fontFamily:"'EB Garamond',georgia,serif"}}>{c.title}</p>
+                  <p style={{fontSize:11,color:"#8a7a6e",margin:"2px 0 0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.desc}</p>
                 </div>
-                <span style={{color:"#C7C7CC",fontSize:14}}>›</span>
+                <span style={{color:"#c5a059",fontSize:14,fontWeight:700}}>›</span>
               </div>
             ))}
           </div>
         );
-        if(s.t==="block") return(
-          <div key={i} style={{padding:"0 18px",marginBottom:10}}>
-            <div style={{background:"#F2F2F7",borderRadius:9,padding:10}}>
-              <span style={{fontSize:9,fontWeight:600,color:"#8E8E93",textTransform:"uppercase",letterSpacing:".06em"}}>{s.name||"block"}</span>
+        if (s.t==="block") return (
+          <div key={i} style={{padding:"0 18px",marginBottom:8}}>
+            <div style={{background:"rgba(161,79,43,0.08)",borderRadius:10,padding:"8px 12px",border:"1px solid rgba(161,79,43,0.15)"}}>
+              <span style={{fontSize:9,fontWeight:700,color:"#a14f2b",textTransform:"uppercase",letterSpacing:".06em"}}>{s.name}</span>
             </div>
           </div>
         );
         return null;
       })}
-      {ts&&<p style={{textAlign:"center",fontSize:9,color:"#C7C7CC",padding:"6px 0 18px"}}>Last sync: {ts}</p>}
     </div>
   );
 }
 
-/* ---- Main ---- */
-function App(){
-  const [url,setUrl]=useState(PRESETS[0].url);
-  const [active,setActive]=useState("court");
-  const [content,setContent]=useState(SAMPLE);
-  const [ts,setTs]=useState(null);
-  const [loading,setLoading]=useState(false);
-  const [status,setStatus]=useState(null);
-  const [rawJson,setRawJson]=useState(null);
-  const [showRaw,setShowRaw]=useState(false);
+/* ---- Phone screen content (dispatches by mode) ---- */
+function PhoneScreen({ parsed, activeRow, onRowSelect, loading }) {
+  if (loading) {
+    return (
+      <div style={{padding:"80px 20px",textAlign:"center"}}>
+        <div style={{width:26,height:26,border:"3px solid #e8e0d8",borderTopColor:"#a14f2b",borderRadius:"50%",animation:"spin .7s linear infinite",margin:"0 auto 12px"}}/>
+        <p style={{fontSize:12,color:"#8a7a6e",fontFamily:"Montserrat,sans-serif"}}>Fetching…</p>
+      </div>
+    );
+  }
 
-  const doFetch=useCallback(async()=>{
-    setLoading(true);setStatus(null);const u=url.trim();
-    try{const r=await fetch(u,{headers:{accept:"application/json"}});if(r.ok){const d=await r.json();setRawJson(d);setContent(parseResponse(d));setTs(new Date().toLocaleTimeString());setStatus("live");setLoading(false);return;}}catch(_){}
-    for(const p of PROXIES){try{const r=await fetch(p(u),{headers:{accept:"application/json"}});if(r.ok){const d=await r.json();setRawJson(d);setContent(parseResponse(d));setTs(new Date().toLocaleTimeString());setStatus("proxy");setLoading(false);return;}}catch(_){}}
-    setStatus("error");setTs(new Date().toLocaleTimeString()+" (cached)");setLoading(false);
-  },[url]);
+  if (!parsed) {
+    return (
+      <div style={{padding:"80px 20px",textAlign:"center"}}>
+        <p style={{fontSize:12,color:"#8a7a6e",fontFamily:"Montserrat,sans-serif"}}>Hit Fetch to load content</p>
+      </div>
+    );
+  }
 
-  const pick=(p)=>{setActive(p.id);setUrl(p.url);setRawJson(null);setStatus(null);};
+  if (parsed.mode === "sheet") {
+    const rows = parsed.rows || [];
+    const row  = rows[activeRow] || rows[0] || {};
+    return (
+      <div style={{height:"100%",display:"flex",flexDirection:"column"}}>
+        {rows.length > 1 && (
+          <RowSelector rows={rows} active={activeRow} onSelect={onRowSelect} />
+        )}
+        <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
+          <OfferCard row={row} />
+        </div>
+      </div>
+    );
+  }
 
-  const mono="'DM Mono',monospace";
+  // Page mode
+  return (
+    <div style={{height:"100%",overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
+      <PageUI sections={parsed.sections} loading={false} />
+    </div>
+  );
+}
 
-  const aemcs=`// Pre-req: Define CF Model (AEM > Tools > Assets > CF Models)
+/* ---- Main App ---- */
+function App() {
+  const [url,        setUrl]        = useState(PRESETS[0].url);
+  const [active,     setActive]     = useState("offers");
+  const [hintMode,   setHintMode]   = useState("sheet");
+  const [parsed,     setParsed]     = useState(SAMPLE_SHEET);
+  const [activeRow,  setActiveRow]  = useState(0);
+  const [loading,    setLoading]    = useState(false);
+  const [status,     setStatus]     = useState("cached");
+  const [ts,         setTs]         = useState(null);
+  const [rawJson,    setRawJson]    = useState(null);
+  const [showRaw,    setShowRaw]    = useState(false);
+
+  const mono = "'DM Mono',monospace";
+
+  const doFetch = useCallback(async () => {
+    setLoading(true); setStatus(null);
+    const u = url.trim();
+    const hint = hintMode;
+
+    const tryParse = (d) => {
+      try { return parseResponse(d, hint); } catch(_) { return null; }
+    };
+
+    // Direct fetch
+    try {
+      const r = await fetch(u, { headers:{ accept:"application/json" } });
+      if (r.ok) {
+        const d = await r.json();
+        const p = tryParse(d);
+        if (p) {
+          setRawJson(d); setParsed(p); setActiveRow(0);
+          setTs(new Date().toLocaleTimeString()); setStatus("live");
+          setLoading(false); return;
+        }
+      }
+    } catch(_) {}
+
+    // Proxy fallback
+    for (const proxy of PROXIES) {
+      try {
+        const r = await fetch(proxy(u), { headers:{ accept:"application/json" } });
+        if (r.ok) {
+          const raw = await r.text();
+          const d = JSON.parse(raw);
+          const p = tryParse(d);
+          if (p) {
+            setRawJson(d); setParsed(p); setActiveRow(0);
+            setTs(new Date().toLocaleTimeString()); setStatus("proxy");
+            setLoading(false); return;
+          }
+        }
+      } catch(_) {}
+    }
+
+    // Fallback to sample
+    const fallback = hint === "sheet" ? SAMPLE_SHEET : SAMPLE_PAGE;
+    setParsed(fallback); setActiveRow(0);
+    setTs(new Date().toLocaleTimeString() + " (cached)"); setStatus("cached");
+    setLoading(false);
+  }, [url, hintMode]);
+
+  const pick = (p) => {
+    setActive(p.id); setUrl(p.url); setHintMode(p.mode);
+    setRawJson(null); setStatus(null); setParsed(null); setActiveRow(0);
+  };
+
+  const aemcs = `// Pre-req: Define CF Model (AEM > Tools > Assets > CF Models)
 // Pre-req: Create Content Fragments in AEM Assets DAM
 // Pre-req: Register persisted query on AEM CS GraphQL endpoint
 
-// Fetch from AEM CS persisted query endpoint
 const resp = await fetch(
   "https://publish-p12345-e67890.adobeaemcloud.com"
-  + "/graphql/execute.json/my-site/page-content"
-  + ";path=/content/dam/my-site/en/page",
+  + "/graphql/execute.json/my-site/account-offers"
+  + ";variation=checking",
   {
     headers: {
       "Authorization": "Bearer " + accessToken,
@@ -168,82 +488,104 @@ const resp = await fetch(
 );
 const { data } = await resp.json();
 
-// Persisted query definition (registered in AEM):
-// query PageContent($path: String!) {
-//   articleByPath(_path: $path) {
-//     item {
-//       _path
+// Persisted query (registered in AEM):
+// query AccountOffers($variation: String!) {
+//   offerList(_variation: $variation) {
+//     items {
 //       title
-//       body { json plaintext }
-//       featuredImage {
-//         ... on ImageRef {
-//           _publishUrl
-//           width
-//           height
-//         }
-//       }
+//       offerText
+//       details { plaintext }
+//       ctaLabel
+//       accountType
 //     }
 //   }
 // }`;
 
-  return(
+  return (
     <div style={{minHeight:"100vh",background:"#F5F5F7"}}>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
 
       {/* Header */}
-      <div style={{padding:"20px 28px",background:"#fff",borderBottom:"1px solid #E5E5EA"}}>
-        <h1 style={{fontSize:20,fontWeight:800,letterSpacing:"-0.03em",margin:0}}>EDS → Mobile Consumer</h1>
-        <p style={{fontSize:12,color:"#86868B",margin:"2px 0 0"}}>Point any EDS page at this app. Author in DA, consume on mobile. One fetch call.</p>
+      <div style={{padding:"18px 28px",background:"#fff",borderBottom:"1px solid #E5E5EA"}}>
+        <h1 style={{fontSize:19,fontWeight:800,letterSpacing:"-0.03em",margin:0}}>EDS → Mobile Consumer</h1>
+        <p style={{fontSize:11.5,color:"#86868B",margin:"2px 0 0"}}>Author in DA. Consume anywhere. One fetch call.</p>
       </div>
 
       {/* URL Bar */}
-      <div style={{padding:"14px 28px",background:"#fff",borderBottom:"1px solid #E5E5EA"}}>
+      <div style={{padding:"12px 28px",background:"#fff",borderBottom:"1px solid #E5E5EA"}}>
         <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:10}}>
           <input
-            value={url} onChange={e=>{setUrl(e.target.value);setActive(null);}}
-            onKeyDown={e=>{if(e.key==="Enter")doFetch();}}
-            placeholder="https://mhast-html-to-json.adobeaem.workers.dev/org/repo/path"
-            style={{flex:1,background:"#1D1D1F",border:"1.5px solid #333",borderRadius:10,padding:"11px 14px",color:"#30D158",fontSize:13,fontFamily:mono,outline:"none"}}
+            value={url}
+            onChange={e => { setUrl(e.target.value); setActive(null); }}
+            onKeyDown={e => { if(e.key==="Enter") doFetch(); }}
+            placeholder="https://main--repo--org.aem.live/path.json  or  html2json URL"
+            style={{
+              flex:1, background:"#1D1D1F", border:"1.5px solid #333",
+              borderRadius:10, padding:"10px 14px", color:"#30D158",
+              fontSize:12.5, fontFamily:mono, outline:"none",
+            }}
           />
           <button onClick={doFetch} disabled={loading} style={{
-            background:loading?"#B0B0B8":"#007AFF",color:"#fff",border:"none",borderRadius:10,
-            padding:"11px 22px",fontSize:14,fontWeight:700,cursor:loading?"wait":"pointer",
-            fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap",
+            background:loading?"#B0B0B8":"#a14f2b",color:"#fff",border:"none",
+            borderRadius:10,padding:"10px 20px",fontSize:13,fontWeight:700,
+            cursor:loading?"wait":"pointer",fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap",
           }}>{loading?"Fetching…":"⟳ Fetch"}</button>
         </div>
+
         <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
-          <span style={{fontSize:10,color:"#86868B",fontWeight:600,textTransform:"uppercase",letterSpacing:".06em",fontFamily:mono}}>Presets:</span>
-          {PRESETS.map(p=>(
-            <button key={p.id} onClick={()=>pick(p)} style={{
-              background:active===p.id?"#1D1D1F":"#E8E8ED",
-              color:active===p.id?"#fff":"#636366",
-              border:"none",borderRadius:6,padding:"5px 12px",fontSize:11,fontWeight:600,
-              cursor:"pointer",fontFamily:mono,transition:"all .15s",
+          <span style={{fontSize:9.5,color:"#86868B",fontWeight:700,textTransform:"uppercase",letterSpacing:".07em",fontFamily:mono}}>Presets:</span>
+          {PRESETS.map(p => (
+            <button key={p.id} onClick={() => pick(p)} style={{
+              background: active===p.id ? "#1D1D1F" : "#E8E8ED",
+              color:       active===p.id ? "#fff"    : "#636366",
+              border:"none", borderRadius:6, padding:"5px 12px",
+              fontSize:11, fontWeight:600, cursor:"pointer",
+              fontFamily:mono, transition:"all .15s",
             }}>{p.label}</button>
           ))}
-          {status&&(
-            <span style={{marginLeft:"auto",fontSize:10,fontFamily:mono,fontWeight:600,padding:"3px 10px",borderRadius:5,letterSpacing:".04em",textTransform:"uppercase",
-              background:status==="live"?"#D1FAE5":status==="proxy"?"#FEF3C7":"#FEE2E2",
-              color:status==="live"?"#065F46":status==="proxy"?"#92400E":"#991B1B",
-            }}>{status==="live"?"✓ live":status==="proxy"?"⚡ via proxy":"✗ cors blocked — showing cached"}</span>
+
+          {/* Mode toggle */}
+          <div style={{marginLeft:8,display:"flex",gap:4,alignItems:"center"}}>
+            {["sheet","page"].map(m => (
+              <button key={m} onClick={() => setHintMode(m)} style={{
+                background: hintMode===m ? "#a14f2b" : "transparent",
+                color:       hintMode===m ? "#fff"    : "#a14f2b",
+                border:"1px solid #a14f2b", borderRadius:5,
+                padding:"3px 9px", fontSize:10, fontWeight:600, cursor:"pointer",
+                fontFamily:mono, transition:"all .15s",
+              }}>{m}</button>
+            ))}
+          </div>
+
+          {status && (
+            <span style={{
+              marginLeft:"auto", fontSize:10, fontFamily:mono, fontWeight:600,
+              padding:"3px 10px", borderRadius:5, letterSpacing:".04em", textTransform:"uppercase",
+              background: status==="live"?"#D1FAE5":status==="proxy"?"#FEF3C7":"#FEE2E2",
+              color:       status==="live"?"#065F46":status==="proxy"?"#92400E":"#991B1B",
+            }}>
+              {status==="live"?"✓ live":status==="proxy"?"⚡ proxy":"⚠ cached sample"}
+            </span>
           )}
         </div>
       </div>
 
-      {/* Main content */}
-      <div style={{display:"flex",gap:0,minHeight:"calc(100vh - 160px)"}}>
+      {/* Main layout */}
+      <div style={{display:"flex",gap:0,minHeight:"calc(100vh - 148px)"}}>
 
         {/* Left — code story */}
-        <div style={{flex:1,padding:"24px 28px",overflow:"auto"}}>
+        <div style={{flex:1,padding:"22px 28px",overflow:"auto"}}>
 
           {/* EDS fetch */}
-          <div style={{marginBottom:24}}>
+          <div style={{marginBottom:22}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
               <div style={{width:8,height:8,borderRadius:"50%",background:"#34C759"}}/>
-              <span style={{fontSize:14,fontWeight:700}}>EDS + html2json</span>
-              <span style={{fontSize:10,fontWeight:600,background:"#D1FAE5",color:"#065F46",padding:"2px 8px",borderRadius:4,fontFamily:mono}}>1 line</span>
+              <span style={{fontSize:13.5,fontWeight:700}}>EDS {parsed?.mode==="sheet"?"Spreadsheet":"html2json"}</span>
+              <span style={{fontSize:9.5,fontWeight:700,background:"#D1FAE5",color:"#065F46",padding:"2px 8px",borderRadius:4,fontFamily:mono}}>
+                {parsed?.mode==="sheet"?"sheet.json — 1 line":"html2json — 1 line"}
+              </span>
             </div>
-            <div style={{background:"#1D1D1F",borderRadius:12,padding:"16px 18px",overflow:"auto"}}>
+            <div style={{background:"#1D1D1F",borderRadius:12,padding:"14px 18px",overflow:"auto"}}>
               <pre style={{margin:0,fontSize:12,lineHeight:1.7,fontFamily:mono,color:"#E8E8ED",whiteSpace:"pre-wrap",wordBreak:"break-all"}}>
                 <span style={{color:"#FF9F0A"}}>const </span>
                 <span style={{color:"#64D2FF"}}>content</span>
@@ -255,34 +597,48 @@ const { data } = await resp.json();
                 <span>)</span>
               </pre>
             </div>
-            <p style={{fontSize:11,color:"#86868B",margin:"8px 0 0",lineHeight:1.5}}>
-              That's the entire integration. The page authored in DA is now structured JSON any app can consume.
+            <p style={{fontSize:11,color:"#86868B",margin:"7px 0 0",lineHeight:1.5}}>
+              {parsed?.mode==="sheet"
+                ? "Every EDS spreadsheet is already a structured JSON endpoint. No CF model, no persisted query, no auth."
+                : "Every page authored in DA is available as structured JSON via html2json. Zero integration overhead."}
             </p>
           </div>
 
-          {/* GraphQL comparison */}
-          <div style={{marginBottom:24}}>
+          {/* AEM CS comparison */}
+          <div style={{marginBottom:22}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
               <div style={{width:8,height:8,borderRadius:"50%",background:"#FF9F0A"}}/>
-              <span style={{fontSize:14,fontWeight:700}}>AEM CS — Content Fragments + Persisted Query</span>
-              <span style={{fontSize:10,fontWeight:600,background:"#FEF3C7",color:"#92400E",padding:"2px 8px",borderRadius:4,fontFamily:mono}}>~20 lines + CF model + auth</span>
+              <span style={{fontSize:13.5,fontWeight:700}}>AEM CS — Content Fragments + GraphQL</span>
+              <span style={{fontSize:9.5,fontWeight:700,background:"#FEF3C7",color:"#92400E",padding:"2px 8px",borderRadius:4,fontFamily:mono}}>~20 lines + CF model + auth</span>
             </div>
-            <div style={{background:"#1D1D1F",borderRadius:12,padding:"16px 18px",overflow:"auto",opacity:.55,maxHeight:220}}>
+            <div style={{background:"#1D1D1F",borderRadius:12,padding:"14px 18px",overflow:"auto",opacity:.5,maxHeight:210}}>
               <pre style={{margin:0,fontSize:10,lineHeight:1.45,fontFamily:mono,color:"#A1A1A6",whiteSpace:"pre-wrap"}}>{aemcs}</pre>
             </div>
-            <p style={{fontSize:11,color:"#86868B",margin:"8px 0 0",lineHeight:1.5}}>
-              Still the right choice for structured data with relationships, variations, and DAM governance — but that's CF modeling, persisted queries, auth tokens, and a publish endpoint before a single byte of content reaches the consumer.
+            <p style={{fontSize:11,color:"#86868B",margin:"7px 0 0",lineHeight:1.5}}>
+              Still the right choice for complex structured data with CF model governance — but that's model definition, fragment creation, persisted query registration, and auth before a single byte reaches the consumer.
             </p>
           </div>
 
-          {/* Raw JSON toggle */}
-          {rawJson&&(
+          {/* Row info (sheet mode) */}
+          {parsed?.mode==="sheet" && parsed.rows?.length > 1 && (
+            <div style={{background:"#f5f2ed",border:"1px solid rgba(161,79,43,0.2)",borderRadius:10,padding:"12px 14px",marginBottom:16}}>
+              <p style={{fontSize:11,color:"#a14f2b",margin:0,fontWeight:600,fontFamily:mono}}>
+                ↕ Row {activeRow+1} of {parsed.rows.length} — tap offer type buttons inside the phone to switch rows
+              </p>
+              <p style={{fontSize:10.5,color:"#6b5a50",margin:"4px 0 0",lineHeight:1.5}}>
+                In a real app, the row selected would be driven by personalization rules, segment membership, or A/B test assignment — all resolved at the edge without a CMS query.
+              </p>
+            </div>
+          )}
+
+          {/* Raw JSON */}
+          {rawJson && (
             <div>
-              <button onClick={()=>setShowRaw(!showRaw)} style={{background:"none",border:"1px solid #D1D1D6",borderRadius:8,padding:"8px 16px",fontSize:12,fontWeight:600,cursor:"pointer",color:"#636366"}}>
+              <button onClick={() => setShowRaw(!showRaw)} style={{background:"none",border:"1px solid #D1D1D6",borderRadius:8,padding:"7px 14px",fontSize:11.5,fontWeight:600,cursor:"pointer",color:"#636366"}}>
                 {showRaw?"Hide":"Show"} raw JSON response
               </button>
-              {showRaw&&(
-                <pre style={{background:"#1D1D1F",color:"#A1A1A6",borderRadius:12,padding:16,marginTop:10,fontSize:10,fontFamily:mono,overflow:"auto",maxHeight:300,lineHeight:1.5,whiteSpace:"pre-wrap",wordBreak:"break-word"}}>
+              {showRaw && (
+                <pre style={{background:"#1D1D1F",color:"#A1A1A6",borderRadius:12,padding:14,marginTop:10,fontSize:10,fontFamily:mono,overflow:"auto",maxHeight:280,lineHeight:1.5,whiteSpace:"pre-wrap",wordBreak:"break-word"}}>
                   {JSON.stringify(rawJson,null,2)}
                 </pre>
               )}
@@ -290,76 +646,64 @@ const { data } = await resp.json();
           )}
         </div>
 
-        {/* Right — iPhone 16 */}
-        <div style={{width:400,flexShrink:0,display:"flex",flexDirection:"column",alignItems:"center",padding:"20px 20px 30px",background:"#EDEDF0",borderLeft:"1px solid #E5E5EA"}}>
+        {/* Right — device emulator */}
+        <div style={{
+          width:420, flexShrink:0, display:"flex", flexDirection:"column",
+          alignItems:"center", padding:"24px 20px 30px",
+          background:"#EDEDF0", borderLeft:"1px solid #E5E5EA",
+        }}>
+          <div className="device-scaler-wrap">
+            <div className="device-scaler">
+              {/* devices.css iphone-x — content goes in .screen */}
+              <div className="marvel-device iphone-x">
+                <div className="notch">
+                  <div className="camera"></div>
+                  <div className="speaker"></div>
+                </div>
+                <div className="top-bar"></div>
+                <div className="sleep"></div>
+                <div className="bottom-bar"></div>
+                <div className="volume"></div>
+                <div className="overflow">
+                  <div className="shadow shadow--tr"></div>
+                  <div className="shadow shadow--tl"></div>
+                  <div className="shadow shadow--br"></div>
+                  <div className="shadow shadow--bl"></div>
+                </div>
+                <div className="inner-shadow"></div>
+                <div className="screen">
+                  {/* Status bar */}
+                  <div style={{
+                    padding:"12px 20px 4px",
+                    display:"flex",justifyContent:"space-between",alignItems:"center",
+                    background:"#f5f2ed",flexShrink:0,
+                  }}>
+                    <span style={{fontSize:13,fontWeight:700,color:"#1a1a1a",fontFamily:"-apple-system,sans-serif"}}>
+                      {new Date().toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}
+                    </span>
+                    <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                      <svg width="15" height="11" viewBox="0 0 16 11"><rect x="0" y="7" width="3" height="4" rx=".7" fill="#1a1a1a"/><rect x="4" y="5" width="3" height="6" rx=".7" fill="#1a1a1a"/><rect x="8" y="2.5" width="3" height="8.5" rx=".7" fill="#1a1a1a"/><rect x="12" y="0" width="3" height="11" rx=".7" fill="#1a1a1a"/></svg>
+                      <svg width="24" height="11" viewBox="0 0 24 11"><rect x=".5" y=".5" width="20" height="10" rx="2.5" fill="none" stroke="#1a1a1a" strokeWidth="1"/><rect x="22" y="3" width="2" height="5" rx="1" fill="#1a1a1a"/><rect x="2" y="2" width="13" height="7" rx="1.5" fill="#a14f2b"/></svg>
+                    </div>
+                  </div>
 
-          {/* iPhone 16 — SVG frame overlay + content underneath */}
-          <div style={{
-            width:310,height:640,position:"relative",
-            filter:"drop-shadow(0 25px 50px rgba(0,0,0,0.18)) drop-shadow(0 8px 16px rgba(0,0,0,0.1))",
-          }}>
-            {/* Content area — sits behind the SVG frame, visible through the screen cutout */}
-            <div style={{
-              position:"absolute",top:8,left:8,right:8,bottom:8,
-              background:"#fff",borderRadius:40,overflow:"hidden",zIndex:1,
-              display:"flex",flexDirection:"column",
-            }}>
-              {/* Status bar */}
-              <div style={{padding:"14px 24px 4px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
-                <span style={{fontSize:14,fontWeight:700,color:"#000",fontFamily:"-apple-system,sans-serif"}}>
-                  {new Date().toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}
-                </span>
-                <div style={{display:"flex",gap:4,alignItems:"center"}}>
-                  <svg width="16" height="11" viewBox="0 0 16 11"><rect x="0" y="7" width="3" height="4" rx="0.7" fill="#000"/><rect x="4" y="5" width="3" height="6" rx="0.7" fill="#000"/><rect x="8" y="2.5" width="3" height="8.5" rx="0.7" fill="#000"/><rect x="12" y="0" width="3" height="11" rx="0.7" fill="#000"/></svg>
-                  <svg width="24" height="11" viewBox="0 0 24 11"><rect x="0.5" y="0.5" width="20" height="10" rx="2.5" fill="none" stroke="#000" strokeWidth="1"/><rect x="22" y="3" width="2" height="5" rx="1" fill="#000"/><rect x="2" y="2" width="13" height="7" rx="1.5" fill="#34C759"/></svg>
+                  <PhoneScreen
+                    parsed={parsed}
+                    activeRow={activeRow}
+                    onRowSelect={setActiveRow}
+                    loading={loading}
+                  />
                 </div>
               </div>
-
-              {/* Scrollable content */}
-              <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
-                <PhoneUI content={content} ts={ts} loading={loading}/>
-              </div>
             </div>
-
-            {/* SVG Frame overlay — renders on top, screen area is transparent */}
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 310 640" width="310" height="640" style={{position:"absolute",top:0,left:0,zIndex:2,pointerEvents:"none"}}>
-              <defs>
-                <mask id="screenMask">
-                  <rect width="310" height="640" fill="white" rx="48"/>
-                  <rect x="8" y="8" width="294" height="624" rx="40" fill="black"/>
-                </mask>
-                <linearGradient id="frameEdge" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0%" stopColor="#3a3a3e"/>
-                  <stop offset="30%" stopColor="#1a1a1e"/>
-                  <stop offset="70%" stopColor="#1a1a1e"/>
-                  <stop offset="100%" stopColor="#2e2e32"/>
-                </linearGradient>
-              </defs>
-              {/* Phone body with screen cutout */}
-              <rect width="310" height="640" rx="48" fill="url(#frameEdge)" mask="url(#screenMask)"/>
-              {/* Outer highlight */}
-              <rect x="0.5" y="0.5" width="309" height="639" rx="47.5" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="1"/>
-              {/* Inner bezel edge */}
-              <rect x="7.5" y="7.5" width="295" height="625" rx="40.5" fill="none" stroke="rgba(0,0,0,0.4)" strokeWidth="1"/>
-              {/* Side buttons */}
-              <rect x="-2" y="128" width="2.5" height="28" rx="1" fill="#2a2a2e"/>
-              <rect x="-2" y="172" width="2.5" height="42" rx="1" fill="#2a2a2e"/>
-              <rect x="-2" y="222" width="2.5" height="42" rx="1" fill="#2a2a2e"/>
-              <rect x="309.5" y="185" width="2.5" height="58" rx="1" fill="#2a2a2e"/>
-              {/* Dynamic Island */}
-              <rect x="109" y="18" width="92" height="28" rx="14" fill="#000"/>
-              <circle cx="174" cy="32" r="4.5" fill="#080810"/>
-              <circle cx="174" cy="32" r="3" fill="#0a0a18" opacity="0.8"/>
-              <circle cx="173" cy="31" r="1.2" fill="rgba(100,100,200,0.15)"/>
-              {/* Home indicator */}
-              <rect x="105" y="626" width="100" height="4" rx="2" fill="#000" opacity="0.2"/>
-            </svg>
           </div>
 
-          <p style={{fontSize:10,color:"#86868B",margin:"14px 0 0",fontFamily:mono,textAlign:"center",lineHeight:1.5}}>
-            Content consumed via html2json service
+          <p style={{fontSize:9.5,color:"#86868B",margin:"12px 0 0",fontFamily:mono,textAlign:"center",lineHeight:1.6}}>
+            {parsed?.mode==="sheet" ? "Content from EDS spreadsheet (.json)" : "Content via html2json service"}
+            {ts && ` · ${ts}`}
           </p>
         </div>
+
       </div>
     </div>
   );
