@@ -441,7 +441,7 @@ function App(){
                 <p style={{fontSize:12,fontWeight:700,color:"#6B7280",margin:"0 0 10px",textTransform:"uppercase",letterSpacing:".08em",fontFamily:MONO}}>How it works</p>
                 {[
                   { n:"01", color:"#34D399", title:"Author a page in DA", body:"Content team writes the page as a document — headings, paragraphs, blocks. Publishes to the EDS CDN as HTML." },
-                  { n:"02", color:"#60A5FA", title:"Append .json to any EDS page URL", body:`The html2json worker intercepts the request and converts the page's HTML into structured JSON — blocks, headings, sections — on the fly. No separate API to build.` },
+                  { n:"02", color:"#60A5FA", title:"Pass the page path to the html2json worker", body:`Call mhast-html-to-json.adobeaem.workers.dev/{org}/{repo}/{path} — the worker fetches the published HTML and converts it to structured JSON on the fly. No API to build, no schema to define.` },
                   { n:"03", color:B.gold,    title:"Your app consumes it", body:"Native iOS app, Android app, Teams tab, kiosk, chatbot — any consumer calls the same URL with .json and gets structured data back. Same source, any render target." },
                 ].map((s,i)=>(
                   <div key={i} style={{display:"flex",gap:12,marginBottom:16}}>
