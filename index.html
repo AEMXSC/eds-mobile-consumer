@@ -79,7 +79,8 @@ const B = {
 };
 
 // ── html2json compact format helpers ─────────────────────────────────────────
-function strip(h){ return (h||"").replace(/<[^>]*>/g,"").replace(/&amp;/g,"&").replace(/&nbsp;/g," ").replace(/&ldquo;/g,'"').replace(/&rdquo;/g,'"').replace(/&rsquo;/g,"'").trim(); }
+function strip(h){ return (h||"").replace(/<[^>]*>/g,"").replace(/&amp;/g,"&").replace(/&nbsp;/g," ").replace(/&ldquo;/g,'"').replace(/&rdquo;/g,'"').replace(/&rsquo;/g,"'").replace(/&#x([0-9a-fA-F]+);/g,(_,x)=>String.fromCharCode(parseInt(x,16))).replace(/&#([0-9]+);/g,(_,d)=>String.fromCharCode(+d)).trim(); }
+function absUrl(src){ if(!src) return null; return src.startsWith("http")?src:SITE_URL.replace(/\/$/,"")+src; }
 function firstTag(html,tag){ const m=(html||"").match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`,"i")); return m?strip(m[1]):null; }
 function allTags(html,tag){ const re=new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`,"gi"); const out=[];let m; while((m=re.exec(html||""))!==null)out.push(strip(m[1])); return out; }
 function cellHtmls(block){ const raw=block.content||[]; return raw.map(d=>typeof d.content==="string"?d.content:(d.innerHTML||"")); }
@@ -98,7 +99,7 @@ function parsePage(data){
         // paragraph/h2 → body text
         if((type==="paragraph"||type==="h2")&&!result.body){
           const txt = typeof node.content==="string" ? strip(node.content) : strip(node.innerHTML||"");
-          if(txt && txt.length>30) result.body = txt;
+          if(txt && txt.length>30 && !txt.startsWith("http")) result.body = txt;
         }
         // hero block
         if(name==="hero" && !result.hero){
@@ -111,7 +112,7 @@ function parsePage(data){
             eyebrow: ps[0]||"",
             title:   firstTag(html,"h1")||firstTag(html,"h2")||ps[1]||"",
             cta:     aM?strip(aM[1]):"Get Started",
-            img:     imgM?imgM[1]:null,
+            img:     absUrl(imgM?imgM[1]:null),
           };
         }
         // cards block
@@ -121,8 +122,8 @@ function parsePage(data){
             const imgM = cellHtml.match(/src=["']([^"']+)["']/);
             const title = firstTag(cellHtml,"h3")||firstTag(cellHtml,"h2")||firstTag(cellHtml,"p")||"";
             const ps = allTags(cellHtml,"p");
-            const desc = ps.find(p=>p!==title&&p.length>10)||"";
-            return title ? { title, desc, img:imgM?imgM[1]:null } : null;
+            const desc = ps.find(p=>p!==title&&p.length>10&&!p.startsWith("http"))||"";
+            return title ? { title, desc, img:absUrl(imgM?imgM[1]:null) } : null;
           }).filter(Boolean);
         }
       }
