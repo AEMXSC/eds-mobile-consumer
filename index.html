@@ -27,12 +27,8 @@ const { useState, useCallback } = React;
 
 // ── URLs ─────────────────────────────────────────────────────────────────────
 const OFFERS_URL  = "https://main--courtneydemo--scdemos.aem.page/offers/account-offers.json";
-const H2J         = "https://mhast-html-to-json.adobeaem.workers.dev";
-const PAGE_PRESETS = [
-  { label:"bbird demo",    url: H2J+"/scdemos/demo/?compact=true&head=false",          site:"https://main--demo--scdemos.aem.page/" },
-  { label:"courtneydemo",  url: H2J+"/scdemos/courtneydemo/?compact=true&head=false",  site:"https://main--courtneydemo--scdemos.aem.page/" },
-  { label:"xscteamsite",   url: H2J+"/aemxsc/xscteamsite/?compact=true&head=false",   site:"https://main--xscteamsite--aemxsc.aem.page/" },
-];
+const PAGE_URL  = "https://mhast-html-to-json.adobeaem.workers.dev/scdemos/courtneydemo/?compact=true&head=false";
+const PAGE_SITE = "https://main--courtneydemo--scdemos.aem.live/";
 const PROXIES     = [
   u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
   u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
@@ -329,7 +325,6 @@ function App(){
   const [showOfferRaw,setShowOfferRaw]= useState(false);
 
   // Page state
-  const [pagePreset, setPagePreset] = useState(0); // index into PAGE_PRESETS
   const [page,       setPage]       = useState(PAGE_FALLBACK);
   const [pageStatus, setPageStatus] = useState("sample");
   const [pageTs,     setPageTs]     = useState(null);
@@ -356,8 +351,8 @@ function App(){
 
   const fetchPage = useCallback(async()=>{
     setPageLoading(true);
-    const res = await tryFetch(PAGE_PRESETS[pagePreset].url);
-    if(res?.d){ const p=parsePage(res.d,PAGE_PRESETS[pagePreset].site); setPage(p); setPageRaw(res.d); setPageStatus(res.st); setPageTs(new Date().toLocaleTimeString()); }
+    const res = await tryFetch(PAGE_URL);
+    if(res?.d){ const p=parsePage(res.d,PAGE_SITE); setPage(p); setPageRaw(res.d); setPageStatus(res.st); setPageTs(new Date().toLocaleTimeString()); }
     else { setPageStatus("error"); }
     setPageLoading(false);
   },[]);
@@ -366,7 +361,7 @@ function App(){
   const loading  = tab==="offers" ? offerLoading : pageLoading;
   const status   = tab==="offers" ? offerStatus  : pageStatus;
   const ts       = tab==="offers" ? offerTs       : pageTs;
-  const fetchUrl = tab==="offers" ? OFFERS_URL    : PAGE_PRESETS[pagePreset].url;
+  const fetchUrl = tab==="offers" ? OFFERS_URL    : PAGE_URL;
   const accentColor = tab==="offers" ? oAccent(offerRows[activeOffer]?.["Account Type"]||"Checking") : B.rust;
 
   return(
@@ -470,7 +465,7 @@ function App(){
                     <span style={{color:"#FF7B72"}}>await </span>
                     <span style={{color:"#D2A8FF"}}>fetch</span>
                     <span style={{color:"#C9D1D9"}}>(</span>
-                    <span style={{color:"#A5D6FF"}}>"{PAGE_PRESETS[pagePreset].url}"</span>
+                    <span style={{color:"#A5D6FF"}}>"{PAGE_URL}"</span>
                     <span style={{color:"#C9D1D9"}}>).then(r {"=>"} r.json()){"\n\n"}</span>
                     <span style={{color:"#8B949E"}}>// content[] — the full page as typed sections{"\n"}// blocks, headings, cards — ready to render natively{"\n"}// No CF model. No persisted query. No auth.</span>
                   </pre>
