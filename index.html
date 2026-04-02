@@ -40,10 +40,10 @@ const PROXIES     = [
 
 // ── Offers fallback data ──────────────────────────────────────────────────────
 const OFFERS_FALLBACK = [
-  { Title:"Max Rate Checking",     "Account Type":"Checking", Offer:"Earn 2.00% APY + $300 bonus when you open and fund a new account", Details:"No monthly fees with $1,500 minimum balance. Free ATM withdrawals nationwide. Mobile deposit available. FDIC insured.", "CTA Label":"Open Account" },
-  { Title:"Premium Savings",       "Account Type":"Savings",  Offer:"4.25% APY on all balances over $10,000",                          Details:"No minimum to open. Automatic round-up savings. Competitive rates guaranteed for 12 months. FDIC insured.",           "CTA Label":"Start Saving" },
-  { Title:"Cash Rewards Mastercard","Account Type":"Credit",  Offer:"Unlimited 2% cash back on every purchase, every day",             Details:"No annual fee. 0% intro APR for 15 months. No foreign transaction fees. Fraud protection included.",                  "CTA Label":"Apply Now" },
-  { Title:"Student Checking",      "Account Type":"Student",  Offer:"No monthly fees for students under 25 — guaranteed",              Details:"Free first order of checks. No overdraft fees on first 3 occurrences. Campus ATM access. Mobile banking with Zelle.", "CTA Label":"Open Free Account" },
+  { Title:"Max Rate Checking Account", "Account Type":"Checking", Offer:"Special offer: Earn 2.00% APY plus get $300", Details:"No transaction fees. ATM and foreign transaction refunds worldwide. Mobile deposit available. FDIC insured.", "CTA Label":"Open Account", Banner:"https://main--courtneydemo--scdemos.aem.page/media_1e23036ffb279f53a8b7b1f8c4ebd6f533afa5792.jpg?width=750&format=jpg&optimize=medium" },
+  { Title:"Premium Savings",           "Account Type":"Savings",  Offer:"Earn 4.25% APY on balances over $10,000",     Details:"No minimum to open. Automatic round-up savings. Competitive rates guaranteed for 12 months. FDIC insured.",           "CTA Label":"Start Saving",   Banner:"https://main--courtneydemo--scdemos.aem.page/media_15fbb4d6f12f757450f8c32ad50a11895bf60fcf0.jpg?width=750&format=jpg&optimize=medium" },
+  { Title:"Cash Rewards Card",         "Account Type":"Credit",   Offer:"Unlimited 2% cash back on every purchase",    Details:"No annual fee. 0% intro APR for 15 months. No foreign transaction fees. Fraud protection included.",                  "CTA Label":"Apply Now",      Banner:"https://main--courtneydemo--scdemos.aem.page/media_10ab33f7c7110ea4c2fb0b05ee2edd3a656bd6f9d.jpg?width=750&format=jpg&optimize=medium" },
+  { Title:"Student Checking",          "Account Type":"Checking", Offer:"No monthly fees for students under 25",       Details:"Free first order of checks. No overdraft fees on first 3 occurrences. Campus ATM access. Mobile banking with Zelle.",  "CTA Label":"Open Free Account", Banner:"https://main--courtneydemo--scdemos.aem.page/media_18aff15c495acc2d64c7da01d6988fe979c38926d.png?width=750&format=png&optimize=medium" },
 ];
 
 // ── Page fallback (courtneydemo homepage content) ─────────────────────────────
@@ -151,15 +151,23 @@ function OfferCard({ row }){
   const offer  = row.Offer||row.Description||"";
   const details= row.Details||"";
   const cta    = row["CTA Label"]||"Learn More";
+  const banner = row.Banner||row.Image||row.image||null;
   const accent = oAccent(type);
   const badge  = oBadge(type);
   const bullets= details.split(/\.\s+/).map(s=>s.replace(/\.$/,"").trim()).filter(Boolean);
   return(
     <div style={{margin:"14px 12px",borderRadius:20,overflow:"hidden",boxShadow:"0 8px 32px rgba(0,0,0,.12)"}}>
-      <div style={{background:accent,padding:"18px 18px 14px"}}>
-        <span style={{background:badge.bg,color:badge.txt,fontSize:9,fontWeight:800,textTransform:"uppercase",letterSpacing:".1em",padding:"3px 10px",borderRadius:20}}>{type}</span>
-        <h2 style={{fontSize:18,fontWeight:800,color:"#fff",margin:"10px 0 6px",lineHeight:1.2}}>{title}</h2>
-        <p style={{fontSize:12,color:"rgba(255,255,255,.85)",margin:0,lineHeight:1.4}}>{offer}</p>
+      {/* Banner image with accent overlay */}
+      <div style={{position:"relative"}}>
+        {banner
+          ? <img src={banner} alt="" style={{width:"100%",height:140,objectFit:"cover",display:"block"}}/>
+          : <div style={{height:80,background:accent}}/>
+        }
+        <div style={{position:"absolute",bottom:0,left:0,right:0,padding:"28px 16px 12px",background:"linear-gradient(transparent,rgba(0,0,0,.65))"}}>
+          <span style={{background:badge.bg,color:badge.txt,fontSize:9,fontWeight:800,textTransform:"uppercase",letterSpacing:".1em",padding:"3px 10px",borderRadius:20}}>{type}</span>
+          <h2 style={{fontSize:17,fontWeight:800,color:"#fff",margin:"7px 0 4px",lineHeight:1.2}}>{title}</h2>
+          <p style={{fontSize:11,color:"rgba(255,255,255,.88)",margin:0,lineHeight:1.4}}>{offer}</p>
+        </div>
       </div>
       <div style={{background:"#fff",padding:"14px 18px"}}>
         {bullets.map((b,i)=>(
