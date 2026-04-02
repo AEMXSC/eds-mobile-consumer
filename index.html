@@ -41,18 +41,21 @@ const PRESETS = [
     label: "Account Offers",
     url: "https://main--courtneydemo--scdemos.aem.live/offers/account-offers.json",
     mode: "sheet",
+    siteUrl: "https://main--courtneydemo--scdemos.aem.page/offers/",
   },
   {
     id: "courtney",
     label: "courtneydemo",
     url: `${SVC}/scdemos/courtneydemo/?compact=true&head=false`,
     mode: "page",
+    siteUrl: "https://main--courtneydemo--scdemos.aem.page/",
   },
   {
     id: "xsc",
     label: "xscteamsite",
     url: `${SVC}/aemxsc/xscteamsite/?compact=true&head=false`,
     mode: "page",
+    siteUrl: "https://main--xscteamsite--aemxsc.aem.page/",
   },
 ];
 
@@ -643,6 +646,10 @@ function App() {
   const [ts,         setTs]         = useState(null);
   const [rawJson,    setRawJson]    = useState(null);
   const [showRaw,    setShowRaw]    = useState(false);
+  const [viewMode,   setViewMode]   = useState("app"); // "app" | "site"
+
+  // derive the site URL for the active preset
+  const activeSiteUrl = PRESETS.find(p => p.id === active)?.siteUrl || null;
 
   const mono = "'DM Mono',monospace";
 
@@ -696,6 +703,7 @@ function App() {
   const pick = (p) => {
     setActive(p.id); setUrl(p.url); setHintMode(p.mode);
     setRawJson(null); setStatus(null); setParsed(null); setActiveRow(0);
+    setViewMode("app");
   };
 
   const aemcs = `// Pre-req: Define CF Model (AEM > Tools > Assets > CF Models)
@@ -914,9 +922,28 @@ POST https://json2html.adobeaem.workers.dev
           alignItems:"center", padding:"24px 20px 30px",
           background:"#EDEDF0", borderLeft:"1px solid #E5E5EA",
         }}>
+
+          {/* View toggle — Site vs App */}
+          <div style={{display:"flex",gap:0,marginBottom:14,borderRadius:8,overflow:"hidden",border:"1px solid #D1D1D6",flexShrink:0}}>
+            {[
+              { id:"site", label:"🌐 Site", tip:"Live iframe — exact CSS, exact layout" },
+              { id:"app",  label:"📱 App",  tip:"Headless — custom native render" },
+            ].map(v => (
+              <button key={v.id}
+                onClick={() => setViewMode(v.id)}
+                title={v.tip}
+                style={{
+                  padding:"7px 18px", border:"none", cursor:"pointer",
+                  background: viewMode===v.id ? "#1D1D1F" : "#F2F2F7",
+                  color:       viewMode===v.id ? "#fff"    : "#636366",
+                  fontSize:12, fontWeight:700, fontFamily:mono,
+                  transition:"all .15s",
+                }}>{v.label}</button>
+            ))}
+          </div>
+
           <div className="device-scaler-wrap">
             <div className="device-scaler">
-              {/* devices.css iphone-x — content goes in .screen */}
               <div className="marvel-device iphone-x">
                 <div className="notch">
                   <div className="camera"></div>
@@ -934,35 +961,57 @@ POST https://json2html.adobeaem.workers.dev
                 </div>
                 <div className="inner-shadow"></div>
                 <div className="screen">
-                  {/* Status bar */}
-                  <div style={{
-                    padding:"12px 20px 4px",
-                    display:"flex",justifyContent:"space-between",alignItems:"center",
-                    background:"#f5f2ed",flexShrink:0,
-                  }}>
-                    <span style={{fontSize:13,fontWeight:700,color:"#1a1a1a",fontFamily:"-apple-system,sans-serif"}}>
-                      {new Date().toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}
-                    </span>
-                    <div style={{display:"flex",gap:4,alignItems:"center"}}>
-                      <svg width="15" height="11" viewBox="0 0 16 11"><rect x="0" y="7" width="3" height="4" rx=".7" fill="#1a1a1a"/><rect x="4" y="5" width="3" height="6" rx=".7" fill="#1a1a1a"/><rect x="8" y="2.5" width="3" height="8.5" rx=".7" fill="#1a1a1a"/><rect x="12" y="0" width="3" height="11" rx=".7" fill="#1a1a1a"/></svg>
-                      <svg width="24" height="11" viewBox="0 0 24 11"><rect x=".5" y=".5" width="20" height="10" rx="2.5" fill="none" stroke="#1a1a1a" strokeWidth="1"/><rect x="22" y="3" width="2" height="5" rx="1" fill="#1a1a1a"/><rect x="2" y="2" width="13" height="7" rx="1.5" fill="#a14f2b"/></svg>
-                    </div>
-                  </div>
 
-                  <PhoneScreen
-                    parsed={parsed}
-                    activeRow={activeRow}
-                    onRowSelect={setActiveRow}
-                    loading={loading}
-                  />
+                  {viewMode === "site" ? (
+                    /* ── Site view: live iframe of the actual EDS page ── */
+                    activeSiteUrl ? (
+                      <iframe
+                        key={activeSiteUrl}
+                        src={activeSiteUrl}
+                        style={{width:"100%",height:"100%",border:"none",display:"block"}}
+                        title="Live EDS site"
+                      />
+                    ) : (
+                      <div style={{padding:"60px 20px",textAlign:"center",fontFamily:mono,fontSize:11,color:"#8a7a6e"}}>
+                        No site URL for this preset
+                      </div>
+                    )
+                  ) : (
+                    /* ── App view: custom headless renderer ── */
+                    <>
+                      <div style={{
+                        padding:"12px 20px 4px",
+                        display:"flex",justifyContent:"space-between",alignItems:"center",
+                        background:"#f5f2ed",flexShrink:0,
+                      }}>
+                        <span style={{fontSize:13,fontWeight:700,color:"#1a1a1a",fontFamily:"-apple-system,sans-serif"}}>
+                          {new Date().toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}
+                        </span>
+                        <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                          <svg width="15" height="11" viewBox="0 0 16 11"><rect x="0" y="7" width="3" height="4" rx=".7" fill="#1a1a1a"/><rect x="4" y="5" width="3" height="6" rx=".7" fill="#1a1a1a"/><rect x="8" y="2.5" width="3" height="8.5" rx=".7" fill="#1a1a1a"/><rect x="12" y="0" width="3" height="11" rx=".7" fill="#1a1a1a"/></svg>
+                          <svg width="24" height="11" viewBox="0 0 24 11"><rect x=".5" y=".5" width="20" height="10" rx="2.5" fill="none" stroke="#1a1a1a" strokeWidth="1"/><rect x="22" y="3" width="2" height="5" rx="1" fill="#1a1a1a"/><rect x="2" y="2" width="13" height="7" rx="1.5" fill="#a14f2b"/></svg>
+                        </div>
+                      </div>
+                      <PhoneScreen
+                        parsed={parsed}
+                        activeRow={activeRow}
+                        onRowSelect={setActiveRow}
+                        loading={loading}
+                      />
+                    </>
+                  )}
+
                 </div>
               </div>
             </div>
           </div>
 
           <p style={{fontSize:9.5,color:"#86868B",margin:"12px 0 0",fontFamily:mono,textAlign:"center",lineHeight:1.6}}>
-            {parsed?.mode==="sheet" ? "Content from EDS spreadsheet (.json)" : "Content via html2json service"}
-            {ts && ` · ${ts}`}
+            {viewMode==="site"
+              ? `Live site · ${activeSiteUrl||""}`
+              : parsed?.mode==="sheet" ? "Content from EDS spreadsheet (.json)" : "Content via html2json service"
+            }
+            {viewMode==="app" && ts && ` · ${ts}`}
           </p>
         </div>
 
