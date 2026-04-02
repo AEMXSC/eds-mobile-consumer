@@ -619,6 +619,41 @@ const { data } = await resp.json();
             </p>
           </div>
 
+          {/* json2html — second path (sheet mode only) */}
+          {parsed?.mode==="sheet" && (
+            <div style={{marginBottom:22}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                <div style={{width:8,height:8,borderRadius:"50%",background:"#007AFF"}}/>
+                <span style={{fontSize:13.5,fontWeight:700}}>json2html — same sheet → rendered EDS pages</span>
+                <span style={{fontSize:9.5,fontWeight:700,background:"#DBEAFE",color:"#1E40AF",padding:"2px 8px",borderRadius:4,fontFamily:mono}}>Official Adobe Worker</span>
+              </div>
+              <div style={{background:"#1D1D1F",borderRadius:12,padding:"14px 18px",overflow:"auto"}}>
+                <pre style={{margin:0,fontSize:10.5,lineHeight:1.6,fontFamily:mono,color:"#E8E8ED",whiteSpace:"pre-wrap"}}>
+{`// Register once — each row becomes its own EDS page:
+POST https://json2html.adobeaem.workers.dev
+     /config/scdemos/courtneydemo/main
+
+[{
+  "path":     "/offers/",
+  "endpoint": ".../account-offers.json",
+  "arrayKey": "data",
+  "pathKey":  "URL",
+  "template": "/templates/offer-card.html"
+}]
+
+// Result — each row gets its own URL:
+// /offers/max-rate         → Max Rate Checking
+// /offers/premium-savings  → Premium Savings
+// /offers/cash-rewards     → Cash Rewards
+// /offers/student-checking → Student Checking`}
+                </pre>
+              </div>
+              <p style={{fontSize:11,color:"#86868B",margin:"7px 0 0",lineHeight:1.5}}>
+                Same spreadsheet — wired through the official Adobe Cloudflare Worker. Each row renders as a full EDS page at its own URL, served through CDN, SEO-indexed, personalizable by Target. Docs: <span style={{color:"#a14f2b",fontFamily:mono}}>aem.live/developer/json2html</span>
+              </p>
+            </div>
+          )}
+
           {/* Row info (sheet mode) */}
           {parsed?.mode==="sheet" && parsed.rows?.length > 1 && (
             <div style={{background:"#f5f2ed",border:"1px solid rgba(161,79,43,0.2)",borderRadius:10,padding:"12px 14px",marginBottom:16}}>
