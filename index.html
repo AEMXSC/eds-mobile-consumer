@@ -27,8 +27,12 @@ const { useState, useCallback } = React;
 
 // ── URLs ─────────────────────────────────────────────────────────────────────
 const OFFERS_URL  = "https://main--courtneydemo--scdemos.aem.page/offers/account-offers.json";
-const PAGE_URL    = "https://mhast-html-to-json.adobeaem.workers.dev/scdemos/courtneydemo/?compact=true&head=false";
-const SITE_URL    = "https://main--courtneydemo--scdemos.aem.page/";
+const H2J         = "https://mhast-html-to-json.adobeaem.workers.dev";
+const PAGE_PRESETS = [
+  { label:"bbird demo",    url: H2J+"/scdemos/demo/?compact=true&head=false",          site:"https://main--demo--scdemos.aem.page/" },
+  { label:"courtneydemo",  url: H2J+"/scdemos/courtneydemo/?compact=true&head=false",  site:"https://main--courtneydemo--scdemos.aem.page/" },
+  { label:"xscteamsite",   url: H2J+"/aemxsc/xscteamsite/?compact=true&head=false",   site:"https://main--xscteamsite--aemxsc.aem.page/" },
+];
 const PROXIES     = [
   u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
   u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
@@ -80,12 +84,12 @@ const B = {
 
 // ── html2json compact format helpers ─────────────────────────────────────────
 function strip(h){ return (h||"").replace(/<[^>]*>/g,"").replace(/&amp;/g,"&").replace(/&nbsp;/g," ").replace(/&ldquo;/g,'"').replace(/&rdquo;/g,'"').replace(/&rsquo;/g,"'").replace(/&#x([0-9a-fA-F]+);/g,(_,x)=>String.fromCharCode(parseInt(x,16))).replace(/&#([0-9]+);/g,(_,d)=>String.fromCharCode(+d)).trim(); }
-function absUrl(src){ if(!src) return null; return src.startsWith("http")?src:SITE_URL.replace(/\/$/,"")+src; }
+function absUrl(src,base){ if(!src) return null; return src.startsWith("http")?src:(base||"").replace(/\/$/,"")+src; }
 function firstTag(html,tag){ const m=(html||"").match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`,"i")); return m?strip(m[1]):null; }
 function allTags(html,tag){ const re=new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`,"gi"); const out=[];let m; while((m=re.exec(html||""))!==null)out.push(strip(m[1])); return out; }
 function cellHtmls(block){ const raw=block.content||[]; return raw.map(d=>typeof d.content==="string"?d.content:(d.innerHTML||"")); }
 
-function parsePage(data){
+function parsePage(data,base){
   const result = { hero:null, body:"", cards:[] };
   if(!data?.content) return result;
   for(const sec of data.content){
@@ -112,7 +116,7 @@ function parsePage(data){
             eyebrow: ps[0]||"",
             title:   firstTag(html,"h1")||firstTag(html,"h2")||ps[1]||"",
             cta:     aM?strip(aM[1]):"Get Started",
-            img:     absUrl(imgM?imgM[1]:null),
+            img:     absUrl(imgM?imgM[1]:null,base),
           };
         }
         // cards block
@@ -123,7 +127,7 @@ function parsePage(data){
             const title = firstTag(cellHtml,"h3")||firstTag(cellHtml,"h2")||firstTag(cellHtml,"p")||"";
             const ps = allTags(cellHtml,"p");
             const desc = ps.find(p=>p!==title&&p.length>10&&!p.startsWith("http"))||"";
-            return title ? { title, desc, img:absUrl(imgM?imgM[1]:null) } : null;
+            return title ? { title, desc, img:absUrl(imgM?imgM[1]:null,base) } : null;
           }).filter(Boolean);
         }
       }
@@ -317,6 +321,7 @@ function App(){
   const [showOfferRaw,setShowOfferRaw]= useState(false);
 
   // Page state
+  const [pagePreset, setPagePreset] = useState(0); // index into PAGE_PRESETS
   const [page,       setPage]       = useState(PAGE_FALLBACK);
   const [pageStatus, setPageStatus] = useState("sample");
   const [pageTs,     setPageTs]     = useState(null);
@@ -343,8 +348,8 @@ function App(){
 
   const fetchPage = useCallback(async()=>{
     setPageLoading(true);
-    const res = await tryFetch(PAGE_URL);
-    if(res?.d){ const p=parsePage(res.d); setPage(p); setPageRaw(res.d); setPageStatus(res.st); setPageTs(new Date().toLocaleTimeString()); }
+    const res = await tryFetch(PAGE_PRESETS[pagePreset].url);
+    if(res?.d){ const p=parsePage(res.d,PAGE_PRESETS[pagePreset].site); setPage(p); setPageRaw(res.d); setPageStatus(res.st); setPageTs(new Date().toLocaleTimeString()); }
     else { setPageStatus("error"); }
     setPageLoading(false);
   },[]);
@@ -353,7 +358,7 @@ function App(){
   const loading  = tab==="offers" ? offerLoading : pageLoading;
   const status   = tab==="offers" ? offerStatus  : pageStatus;
   const ts       = tab==="offers" ? offerTs       : pageTs;
-  const fetchUrl = tab==="offers" ? OFFERS_URL    : PAGE_URL;
+  const fetchUrl = tab==="offers" ? OFFERS_URL    : PAGE_PRESETS[pagePreset].url;
   const accentColor = tab==="offers" ? oAccent(offerRows[activeOffer]?.["Account Type"]||"Checking") : B.rust;
 
   return(
@@ -427,6 +432,16 @@ function App(){
 
           {tab==="page" ? (
             <>
+              {/* Page preset selector */}
+              <div>
+                <p style={{fontSize:10,fontWeight:700,color:"#9CA3AF",margin:"0 0 6px",textTransform:"uppercase",letterSpacing:".08em",fontFamily:mono}}>Site</p>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                  {PAGE_PRESETS.map((p,i)=>(
+                    <button key={i} onClick={()=>setPagePreset(i)} style={{padding:"4px 12px",borderRadius:20,border:`1px solid ${pagePreset===i?B.rust:"#E5E7EB"}`,cursor:"pointer",background:pagePreset===i?B.rust:"#fff",color:pagePreset===i?"#fff":"#374151",fontSize:11,fontWeight:600,fontFamily:mono,transition:"all .15s"}}>{p.label}</button>
+                  ))}
+                </div>
+              </div>
+
               {/* html2json story */}
               <div>
                 <p style={{fontSize:12,fontWeight:700,color:"#6B7280",margin:"0 0 10px",textTransform:"uppercase",letterSpacing:".08em",fontFamily:mono}}>How it works</p>
@@ -458,7 +473,7 @@ function App(){
                     <span style={{color:"#FF7B72"}}>await </span>
                     <span style={{color:"#D2A8FF"}}>fetch</span>
                     <span style={{color:"#C9D1D9"}}>(</span>
-                    <span style={{color:"#A5D6FF"}}>"{PAGE_URL}"</span>
+                    <span style={{color:"#A5D6FF"}}>"{PAGE_PRESETS[pagePreset].url}"</span>
                     <span style={{color:"#C9D1D9"}}>).then(r {"=>"} r.json()){"\n\n"}</span>
                     <span style={{color:"#8B949E"}}>// content[] — the full page as typed sections{"\n"}// blocks, headings, cards — ready to render natively{"\n"}// No CF model. No persisted query. No auth.</span>
                   </pre>
