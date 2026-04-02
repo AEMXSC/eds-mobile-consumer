@@ -108,33 +108,123 @@ function flattenHtml2Json(data) {
   return [];
 }
 
+/* nodeText: extract readable text from a node regardless of which field holds it */
+function nodeText(it) {
+  if (it.innerHTML) return strip(it.innerHTML);
+  if (it.text)      return strip(it.text);
+  if (typeof it.content === "string") return strip(it.content);
+  return "";
+}
+
+/* blockCells: flatten the content array of a compact block into an array of HTML strings */
+function blockCells(it) {
+  const raw = it.content || it.children || it.rows || [];
+  if (!Array.isArray(raw)) return [];
+  const cells = [];
+  for (const row of raw) {
+    if (typeof row === "string") { cells.push(row); continue; }
+    if (row?.type === "div" || row?.tag === "div") {
+      const inner = typeof row.content === "string" ? row.content : (row.innerHTML || "");
+      cells.push(inner);
+    } else if (Array.isArray(row)) {
+      for (const cell of row) {
+        const inner = typeof cell?.content === "string" ? cell.content : (cell?.innerHTML || "");
+        cells.push(inner);
+      }
+    }
+  }
+  return cells;
+}
+
+/* extractTag: pull first match of <tag>…</tag> out of an HTML string */
+function extractTag(html, tag) {
+  const m = (html||"").match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i"));
+  return m ? strip(m[1]) : null;
+}
+
 function buildSections(items) {
   const s = []; let hero = false;
   items.forEach(it => {
     if (!it) return;
-    const tag = it.tag || it.type || "";
+    const tag  = it.tag || it.type || "";
     const name = (it.name || it.blockName || "").toLowerCase();
+
+    /* ---- headings / paragraphs (both old innerHTML format and new content-string format) ---- */
     if (!hero && (tag === "h1" || it.headingLevel === 1)) {
-      s.push({ t:"hero", title:strip(it.innerHTML||it.text||""), sub:"", img:null });
+      s.push({ t:"hero", title:nodeText(it), sub:"", img:null });
       hero = true;
+
     } else if (tag === "h1" || tag === "h2" || it.headingLevel <= 2) {
-      s.push({ t:"text", h:strip(it.innerHTML||it.text||""), b:"" });
+      s.push({ t:"text", h:nodeText(it), b:"" });
+
     } else if ((tag === "p" || tag === "paragraph") && s.length) {
       const l = s[s.length - 1];
       const key = l.t === "hero" ? "sub" : "b";
-      l[key] = ((l[key]||"") + " " + strip(it.innerHTML||it.text||"")).trim();
+      const txt = nodeText(it);
+      if (txt) l[key] = ((l[key]||"") + " " + txt).trim();
+
     } else if (tag === "img" && s.length && s[s.length-1].t === "hero") {
       s[s.length-1].img = it.src || it.href || null;
+
+    /* ---- hero block (compact format: content[] of div nodes with raw HTML) ---- */
+    } else if (name === "hero") {
+      if (!hero) {
+        const html = blockCells(it).join(" ");
+        const title = extractTag(html,"h1") || extractTag(html,"h2") || extractTag(html,"p") || "Hero";
+        const sub   = extractTag(html,"p") || "";
+        const imgM  = (html).match(/src=["']([^"']+)["']/);
+        s.push({ t:"hero", title, sub: title===sub?"":sub, img: imgM?imgM[1]:null });
+        hero = true;
+      }
+
+    /* ---- cards / columns ---- */
     } else if (name === "cards" || name === "columns") {
-      const ch = it.children || it.rows || [];
-      const ci = ch.map(r => {
-        const c = r.columns || r.children || r || [];
-        return { title:strip(c[0]?.innerHTML||""), desc:strip(c[1]?.innerHTML||""), img:null };
-      }).filter(x => x.title);
-      if (ci.length) s.push({ t:"cards", items:ci });
+      // Old format: it.children / it.rows
+      const oldRows = it.children || it.rows;
+      if (Array.isArray(oldRows) && oldRows.length) {
+        const ci = oldRows.map(r => {
+          const c = r.columns || r.children || r || [];
+          return { title:strip(c[0]?.innerHTML||""), desc:strip(c[1]?.innerHTML||""), img:null };
+        }).filter(x => x.title);
+        if (ci.length) { s.push({ t:"cards", items:ci }); return; }
+      }
+      // Compact format: content[] of div nodes, each div = one card row
+      const cells = blockCells(it);
+      if (cells.length) {
+        // Each cell div may contain multiple <div> children (columns)
+        const ci = cells.map(cellHtml => {
+          const cols = [];
+          const colRe = /<div[^>]*>([\s\S]*?)<\/div>/gi;
+          let m;
+          while ((m = colRe.exec(cellHtml)) !== null) cols.push(strip(m[1]));
+          if (cols.length >= 2) return { title:cols[0], desc:cols[1], img:null };
+          const t = extractTag(cellHtml,"h2")||extractTag(cellHtml,"h3")||extractTag(cellHtml,"p")||strip(cellHtml);
+          return t ? { title:t, desc:"", img:null } : null;
+        }).filter(Boolean);
+        if (ci.length) { s.push({ t:"cards", items:ci }); return; }
+      }
+
+    /* ---- any other named block — try to show its title text instead of raw name ---- */
     } else if (name && name !== "section-metadata" && name !== "metadata") {
-      // unknown block — show as a placeholder
-      s.push({ t:"block", name });
+      const cells = blockCells(it);
+      const html = cells.join(" ");
+      const heading = extractTag(html,"h2") || extractTag(html,"h3") || extractTag(html,"h1");
+      const body    = extractTag(html,"p");
+      if (heading) {
+        s.push({ t:"text", h:heading, b:body||"" });
+      } else if (body) {
+        s.push({ t:"text", h:"", b:body });
+      } else if (cells.length) {
+        // Render as a mini card list
+        const ci = cells.map(c => {
+          const t = extractTag(c,"h2")||extractTag(c,"h3")||extractTag(c,"h4")||extractTag(c,"p")||strip(c);
+          return t ? { title:t, desc:"", img:null } : null;
+        }).filter(Boolean);
+        if (ci.length > 1) s.push({ t:"cards", items:ci });
+        else if (ci.length === 1) s.push({ t:"text", h:ci[0].title, b:"" });
+      } else {
+        s.push({ t:"block", name });
+      }
     }
   });
   return s;
