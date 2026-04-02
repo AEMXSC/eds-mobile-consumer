@@ -413,7 +413,7 @@ function App(){
       <div style={{padding:"10px 32px",borderBottom:"1px solid #F3F4F6",background:"#F9FAFB"}}>
         <p style={{fontSize:11,fontFamily:mono,color:"#059669",margin:0}}>
           <span style={{color:"#6B7280"}}>const {"{"} {tab==="offers"?"data":"content"} {"}"} = await fetch(</span>
-          {fetchUrl}
+          <a href={fetchUrl} target="_blank" rel="noopener" style={{color:"#059669",textDecoration:"none",borderBottom:"1px dashed #059669"}} title="Open raw JSON in new tab">{fetchUrl}</a>
           <span style={{color:"#6B7280"}}>).then(r ={">"} r.json())</span>
         </p>
         {ts&&<p style={{fontSize:9,color:"#9CA3AF",margin:"3px 0 0",fontFamily:mono}}>last fetch: {ts} — edit in DA, publish, hit Fetch ↑</p>}
