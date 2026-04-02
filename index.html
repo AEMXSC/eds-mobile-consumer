@@ -116,7 +116,7 @@ function nodeText(it) {
   return "";
 }
 
-/* blockCells: flatten the content array of a compact block into an array of HTML strings */
+/* blockCells: flatten compact block.content[] into array of HTML strings (one per row/card) */
 function blockCells(it) {
   const raw = it.content || it.children || it.rows || [];
   if (!Array.isArray(raw)) return [];
@@ -124,22 +124,50 @@ function blockCells(it) {
   for (const row of raw) {
     if (typeof row === "string") { cells.push(row); continue; }
     if (row?.type === "div" || row?.tag === "div") {
-      const inner = typeof row.content === "string" ? row.content : (row.innerHTML || "");
-      cells.push(inner);
+      cells.push(typeof row.content === "string" ? row.content : (row.innerHTML || ""));
     } else if (Array.isArray(row)) {
-      for (const cell of row) {
-        const inner = typeof cell?.content === "string" ? cell.content : (cell?.innerHTML || "");
-        cells.push(inner);
-      }
+      for (const cell of row)
+        cells.push(typeof cell?.content === "string" ? cell.content : (cell?.innerHTML || ""));
     }
   }
   return cells;
 }
 
-/* extractTag: pull first match of <tag>…</tag> out of an HTML string */
+/* extractTag: first match of <tag>…</tag> */
 function extractTag(html, tag) {
   const m = (html||"").match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i"));
   return m ? strip(m[1]) : null;
+}
+
+/* extractAllTags: all matches of <tag>…</tag> */
+function extractAllTags(html, tag) {
+  const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "gi");
+  const out = []; let m;
+  while ((m = re.exec(html||"")) !== null) out.push(strip(m[1]));
+  return out;
+}
+
+/* extractInnerDivs: top-level <div> contents from an HTML string */
+function extractInnerDivs(html) {
+  const out = []; let depth = 0, start = -1, i = 0;
+  const h = html || "";
+  while (i < h.length) {
+    if (h.slice(i,i+4).toLowerCase() === "<div") {
+      if (depth === 0) start = i;
+      depth++;
+      i = h.indexOf(">", i) + 1;
+    } else if (h.slice(i,i+6).toLowerCase() === "</div>") {
+      depth--;
+      if (depth === 0 && start >= 0) {
+        const inner = h.slice(start, i + 6);
+        const content = inner.replace(/^<div[^>]*>/i,"").replace(/<\/div>$/i,"");
+        out.push(content);
+        start = -1;
+      }
+      i += 6;
+    } else { i++; }
+  }
+  return out;
 }
 
 function buildSections(items) {
@@ -149,82 +177,101 @@ function buildSections(items) {
     const tag  = it.tag || it.type || "";
     const name = (it.name || it.blockName || "").toLowerCase();
 
-    /* ---- headings / paragraphs (both old innerHTML format and new content-string format) ---- */
+    /* headings / paragraphs */
     if (!hero && (tag === "h1" || it.headingLevel === 1)) {
-      s.push({ t:"hero", title:nodeText(it), sub:"", img:null });
+      s.push({ t:"hero", title:nodeText(it), sub:"", body:"", stats:[], ctas:[], img:null });
       hero = true;
-
     } else if (tag === "h1" || tag === "h2" || it.headingLevel <= 2) {
       s.push({ t:"text", h:nodeText(it), b:"" });
-
     } else if ((tag === "p" || tag === "paragraph") && s.length) {
-      const l = s[s.length - 1];
-      const key = l.t === "hero" ? "sub" : "b";
-      const txt = nodeText(it);
-      if (txt) l[key] = ((l[key]||"") + " " + txt).trim();
-
+      const l = s[s.length-1], txt = nodeText(it);
+      if (txt) { const k = l.t==="hero"?"sub":"b"; l[k]=((l[k]||"")+" "+txt).trim(); }
     } else if (tag === "img" && s.length && s[s.length-1].t === "hero") {
       s[s.length-1].img = it.src || it.href || null;
 
-    /* ---- hero block (compact format: content[] of div nodes with raw HTML) ---- */
-    } else if (name === "hero") {
-      if (!hero) {
-        const html = blockCells(it).join(" ");
-        const title = extractTag(html,"h1") || extractTag(html,"h2") || extractTag(html,"p") || "Hero";
-        const sub   = extractTag(html,"p") || "";
-        const imgM  = (html).match(/src=["']([^"']+)["']/);
-        s.push({ t:"hero", title, sub: title===sub?"":sub, img: imgM?imgM[1]:null });
-        hero = true;
-      }
+    /* hero block — one big div with eyebrow, h1, body p, CTAs, stats ul */
+    } else if (name === "hero" && !hero) {
+      const html = blockCells(it).join(" ");
+      const ps = extractAllTags(html, "p");
+      const eyebrow = ps[0] || "";
+      const title   = extractTag(html,"h1") || extractTag(html,"h2") || ps[1] || "Hero";
+      const body    = ps.find(p => p !== eyebrow && p !== title && p.length > 20) || ps[1] || "";
+      const stats   = extractAllTags(html, "li");
+      const ctaRe   = /<a[^>]*href=["']([^"'#/][^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi;
+      const ctas = []; let cm;
+      while ((cm = ctaRe.exec(html)) !== null) ctas.push({ href:cm[1], label:strip(cm[2]) });
+      const imgM = html.match(/src=["']([^"']+)["']/);
+      s.push({ t:"hero", title, sub:eyebrow, body, stats, ctas, img:imgM?imgM[1]:null });
+      hero = true;
 
-    /* ---- cards / columns ---- */
+    /* cards / columns */
     } else if (name === "cards" || name === "columns") {
-      // Old format: it.children / it.rows
       const oldRows = it.children || it.rows;
       if (Array.isArray(oldRows) && oldRows.length) {
         const ci = oldRows.map(r => {
-          const c = r.columns || r.children || r || [];
-          return { title:strip(c[0]?.innerHTML||""), desc:strip(c[1]?.innerHTML||""), img:null };
+          const c = r.columns||r.children||r||[];
+          return { icon:"", title:strip(c[0]?.innerHTML||""), desc:strip(c[1]?.innerHTML||""), img:null };
         }).filter(x => x.title);
         if (ci.length) { s.push({ t:"cards", items:ci }); return; }
       }
-      // Compact format: content[] of div nodes, each div = one card row
-      const cells = blockCells(it);
-      if (cells.length) {
-        // Each cell div may contain multiple <div> children (columns)
-        const ci = cells.map(cellHtml => {
-          const cols = [];
-          const colRe = /<div[^>]*>([\s\S]*?)<\/div>/gi;
-          let m;
-          while ((m = colRe.exec(cellHtml)) !== null) cols.push(strip(m[1]));
-          if (cols.length >= 2) return { title:cols[0], desc:cols[1], img:null };
-          const t = extractTag(cellHtml,"h2")||extractTag(cellHtml,"h3")||extractTag(cellHtml,"p")||strip(cellHtml);
-          return t ? { title:t, desc:"", img:null } : null;
-        }).filter(Boolean);
-        if (ci.length) { s.push({ t:"cards", items:ci }); return; }
-      }
+      const ci = blockCells(it).map(cellHtml => {
+        const cols = extractInnerDivs(cellHtml);
+        const icon  = cols[0] ? strip(cols[0]) : "";
+        const title = cols[1] ? (extractTag(cols[1],"h3")||extractTag(cols[1],"h2")||strip(cols[1])) : (extractTag(cellHtml,"h3")||extractTag(cellHtml,"h2")||"");
+        const desc  = cols[2] ? strip(cols[2]) : extractTag(cellHtml,"p") || "";
+        const imgM  = cellHtml.match(/src=["']([^"']+)["']/);
+        return title ? { icon, title, desc, img:imgM?imgM[1]:null } : null;
+      }).filter(Boolean);
+      if (ci.length) s.push({ t:"cards", items:ci });
 
-    /* ---- any other named block — try to show its title text instead of raw name ---- */
+    /* revenue-motions block — numbered motions with title, tagline, desc, link */
+    } else if (name === "revenue-motions") {
+      const motions = blockCells(it).map(cellHtml => {
+        const cols = extractInnerDivs(cellHtml);
+        const num     = cols[0] ? strip(cols[0]) : "";
+        const title   = extractTag(cellHtml,"h3") || extractTag(cellHtml,"h2") || "";
+        const ps      = extractAllTags(cellHtml, "p");
+        const tagline = ps[0] || "";
+        const desc    = ps.slice(1).join(" ");
+        const linkM   = cellHtml.match(/<a[^>]*>([\s\S]*?)<\/a>/i);
+        const link    = linkM ? strip(linkM[1]) : "";
+        return title ? { num, title, tagline, desc, link } : null;
+      }).filter(Boolean);
+      if (motions.length) s.push({ t:"motions", motions });
+
+    /* verticals block — dollar amount + industry name */
+    } else if (name === "verticals") {
+      const items = blockCells(it).map(cellHtml => {
+        const cols = extractInnerDivs(cellHtml);
+        const amount   = cols[0] ? strip(cols[0]) : "";
+        const industry = cols[1] ? strip(cols[1]) : strip(cellHtml);
+        return (amount || industry) ? { amount, industry } : null;
+      }).filter(Boolean);
+      if (items.length) s.push({ t:"verticals", items });
+
+    /* team block — name, title, practice, initials/img */
+    } else if (name === "team") {
+      const members = blockCells(it).map(cellHtml => {
+        const cols    = extractInnerDivs(cellHtml);
+        const avatar  = cols[0] || "";
+        const imgM    = avatar.match(/src=["']([^"']+)["']/);
+        const initials = imgM ? null : strip(avatar).slice(0,2).toUpperCase();
+        const name    = cols[1] ? strip(cols[1]) : "";
+        const title   = cols[2] ? strip(cols[2]) : "";
+        const practice= cols[3] ? strip(cols[3]) : "";
+        return name ? { img:imgM?imgM[1]:null, initials:initials||name.slice(0,2).toUpperCase(), name, title, practice } : null;
+      }).filter(Boolean);
+      if (members.length) s.push({ t:"team", members });
+
+    /* any other named block — best-effort text extraction */
     } else if (name && name !== "section-metadata" && name !== "metadata") {
-      const cells = blockCells(it);
-      const html = cells.join(" ");
-      const heading = extractTag(html,"h2") || extractTag(html,"h3") || extractTag(html,"h1");
-      const body    = extractTag(html,"p");
-      if (heading) {
-        s.push({ t:"text", h:heading, b:body||"" });
-      } else if (body) {
-        s.push({ t:"text", h:"", b:body });
-      } else if (cells.length) {
-        // Render as a mini card list
-        const ci = cells.map(c => {
-          const t = extractTag(c,"h2")||extractTag(c,"h3")||extractTag(c,"h4")||extractTag(c,"p")||strip(c);
-          return t ? { title:t, desc:"", img:null } : null;
-        }).filter(Boolean);
-        if (ci.length > 1) s.push({ t:"cards", items:ci });
-        else if (ci.length === 1) s.push({ t:"text", h:ci[0].title, b:"" });
-      } else {
-        s.push({ t:"block", name });
-      }
+      const html = blockCells(it).join(" ");
+      const heading = extractTag(html,"h2")||extractTag(html,"h3")||extractTag(html,"h1");
+      const body    = extractAllTags(html,"p").join(" ");
+      const items   = extractAllTags(html,"li");
+      if (heading||body) s.push({ t:"text", h:heading||"", b:body });
+      else if (items.length) s.push({ t:"list", items });
+      else s.push({ t:"block", name });
     }
   });
   return s;
@@ -394,54 +441,144 @@ function PageUI({ sections, loading }) {
       <p style={{fontSize:12,color:"#8a7a6e"}}>Enter a URL and hit Fetch</p>
     </div>
   );
+  const serif = "'EB Garamond',georgia,serif";
   return (
     <div style={{fontFamily:sf,paddingBottom:24}}>
       {sections.map((s,i) => {
+
+        /* ── hero ── */
         if (s.t==="hero") return (
-          <div key={i} style={{position:"relative",marginBottom:16}}>
-            {s.img && <img src={s.img} alt="" style={{width:"100%",height:165,objectFit:"cover"}}/>}
-            <div style={{
-              padding:s.img?"14px 18px":"28px 18px 14px",
-              background:s.img?"linear-gradient(transparent,rgba(26,26,26,.8))":"none",
-              position:s.img?"absolute":"relative",bottom:0,left:0,right:0,
-            }}>
-              {s.sub && <p style={{fontSize:10,fontWeight:500,textTransform:"uppercase",letterSpacing:".08em",color:s.img?"rgba(245,242,237,.7)":"#8a7a6e",margin:"0 0 4px"}}>{s.sub}</p>}
-              <h1 style={{fontSize:19,fontWeight:700,color:s.img?"#f5f2ed":"#1a1a1a",margin:0,lineHeight:1.2,fontFamily:"'EB Garamond',georgia,serif"}}>{s.title}</h1>
-            </div>
+          <div key={i} style={{background:"linear-gradient(160deg,#0f1f38 0%,#1a3550 100%)",padding:"22px 18px 16px",marginBottom:4}}>
+            {s.sub && <p style={{fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:".12em",color:"rgba(197,160,89,.8)",margin:"0 0 8px"}}>{s.sub}</p>}
+            <h1 style={{fontSize:22,fontWeight:800,color:"#fff",margin:"0 0 10px",lineHeight:1.15,fontFamily:serif}}>{s.title}</h1>
+            {s.body && <p style={{fontSize:11,color:"rgba(255,255,255,.7)",lineHeight:1.5,margin:"0 0 14px"}}>{s.body}</p>}
+            {s.ctas?.length>0 && (
+              <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
+                {s.ctas.map((c,ci)=>(
+                  <div key={ci} style={{
+                    background:ci===0?"#c5a059":"transparent",
+                    border:ci===0?"none":"1px solid rgba(197,160,89,.5)",
+                    color:ci===0?"#0f1f38":"#c5a059",
+                    borderRadius:8,padding:"7px 14px",fontSize:11,fontWeight:700,
+                  }}>{c.label}</div>
+                ))}
+              </div>
+            )}
+            {s.stats?.length>0 && (
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {s.stats.map((st,si)=>(
+                  <div key={si} style={{background:"rgba(255,255,255,.08)",borderRadius:6,padding:"4px 8px",fontSize:10,color:"rgba(255,255,255,.75)",fontWeight:600}}>{st}</div>
+                ))}
+              </div>
+            )}
           </div>
         );
+
+        /* ── text / heading ── */
         if (s.t==="text") return (
-          <div key={i} style={{padding:"0 18px",marginBottom:12}}>
-            {s.h && <h2 style={{fontSize:15,fontWeight:700,color:"#1a1a1a",margin:"0 0 4px",fontFamily:"'EB Garamond',georgia,serif"}}>{s.h}</h2>}
-            {s.b && <p style={{fontSize:12,color:"#4a3a2e",lineHeight:1.6,margin:0}}>{s.b}</p>}
+          <div key={i} style={{padding:"12px 18px 4px"}}>
+            {s.h && <h2 style={{fontSize:14,fontWeight:700,color:"#1a1a1a",margin:"0 0 4px",fontFamily:serif}}>{s.h}</h2>}
+            {s.b && <p style={{fontSize:11.5,color:"#4a3a2e",lineHeight:1.6,margin:0}}>{s.b}</p>}
           </div>
         );
-        if (s.t==="cta") return (
-          <div key={i} style={{padding:"4px 18px",marginBottom:14,textAlign:"center"}}>
-            <p style={{fontSize:13,color:"#4a3a2e",margin:"0 0 10px",fontWeight:500}}>{s.text}</p>
-            <div style={{background:"linear-gradient(135deg,#a14f2b 0%,#c5a059 100%)",color:"#fff",borderRadius:12,padding:"11px 22px",fontSize:13,fontWeight:700,display:"inline-block",letterSpacing:"0.04em"}}>{s.btn}</div>
-          </div>
-        );
+
+        /* ── cards ── */
         if (s.t==="cards") return (
-          <div key={i} style={{padding:"0 18px",marginBottom:12}}>
-            {s.items.map((c,ci) => (
-              <div key={ci} style={{display:"flex",gap:10,alignItems:"center",padding:"10px 0",borderBottom:ci<s.items.length-1?"1px solid rgba(197,160,89,0.25)":"none"}}>
+          <div key={i} style={{padding:"4px 14px 8px"}}>
+            {s.items.map((c,ci)=>(
+              <div key={ci} style={{display:"flex",gap:10,alignItems:"center",padding:"9px 0",borderBottom:ci<s.items.length-1?"1px solid rgba(197,160,89,.2)":"none"}}>
                 {c.img
-                  ? <img src={c.img} alt="" style={{width:46,height:46,borderRadius:10,objectFit:"cover",flexShrink:0}}/>
-                  : <div style={{width:46,height:46,borderRadius:10,background:"rgba(161,79,43,0.1)",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:16}}>☕</span></div>
+                  ? <img src={c.img} alt="" style={{width:40,height:40,borderRadius:8,objectFit:"cover",flexShrink:0}}/>
+                  : <div style={{width:40,height:40,borderRadius:8,background:"rgba(161,79,43,.1)",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>{c.icon||"📋"}</div>
                 }
                 <div style={{flex:1,minWidth:0}}>
-                  <p style={{fontSize:13,fontWeight:600,color:"#1a1a1a",margin:0,fontFamily:"'EB Garamond',georgia,serif"}}>{c.title}</p>
-                  <p style={{fontSize:11,color:"#8a7a6e",margin:"2px 0 0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.desc}</p>
+                  <p style={{fontSize:12.5,fontWeight:700,color:"#1a1a1a",margin:0,fontFamily:serif}}>{c.title}</p>
+                  {c.desc && <p style={{fontSize:10.5,color:"#8a7a6e",margin:"2px 0 0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.desc}</p>}
                 </div>
                 <span style={{color:"#c5a059",fontSize:14,fontWeight:700}}>›</span>
               </div>
             ))}
           </div>
         );
+
+        /* ── revenue motions ── */
+        if (s.t==="motions") return (
+          <div key={i} style={{padding:"4px 14px 8px"}}>
+            {s.motions.map((m,mi)=>(
+              <div key={mi} style={{padding:"10px 0",borderBottom:mi<s.motions.length-1?"1px solid rgba(197,160,89,.2)":"none"}}>
+                <div style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+                  <div style={{
+                    minWidth:26,height:26,borderRadius:6,
+                    background:"#c5a059",color:"#0f1f38",
+                    fontSize:11,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",
+                    flexShrink:0,marginTop:1,
+                  }}>{m.num||String(mi+1).padStart(2,"0")}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <p style={{fontSize:12.5,fontWeight:700,color:"#1a1a1a",margin:0,fontFamily:serif}}>{m.title}</p>
+                    {m.tagline && <p style={{fontSize:10.5,color:"#a14f2b",margin:"2px 0 0",fontStyle:"italic"}}>{m.tagline}</p>}
+                    {m.desc && <p style={{fontSize:10.5,color:"#6b5a50",margin:"4px 0 0",lineHeight:1.45}}>{m.desc}</p>}
+                    {m.link && <p style={{fontSize:10,color:"#c5a059",margin:"4px 0 0",fontWeight:700}}>{m.link} →</p>}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+
+        /* ── verticals ── */
+        if (s.t==="verticals") return (
+          <div key={i} style={{padding:"4px 14px 8px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+            {s.items.map((v,vi)=>(
+              <div key={vi} style={{background:"rgba(161,79,43,.06)",borderRadius:10,padding:"8px 10px",border:"1px solid rgba(197,160,89,.2)"}}>
+                <p style={{fontSize:13,fontWeight:800,color:"#a14f2b",margin:0,fontFamily:serif}}>{v.amount}</p>
+                <p style={{fontSize:10,color:"#4a3a2e",margin:"2px 0 0",lineHeight:1.3}}>{v.industry}</p>
+              </div>
+            ))}
+          </div>
+        );
+
+        /* ── team ── */
+        if (s.t==="team") return (
+          <div key={i} style={{padding:"4px 14px 8px"}}>
+            {s.members.map((m,mi)=>(
+              <div key={mi} style={{display:"flex",gap:10,alignItems:"center",padding:"8px 0",borderBottom:mi<s.members.length-1?"1px solid rgba(197,160,89,.2)":"none"}}>
+                {m.img
+                  ? <img src={m.img} alt={m.name} style={{width:38,height:38,borderRadius:19,objectFit:"cover",flexShrink:0}}/>
+                  : <div style={{width:38,height:38,borderRadius:19,background:"linear-gradient(135deg,#a14f2b,#c5a059)",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800,color:"#fff"}}>{m.initials}</div>
+                }
+                <div style={{flex:1,minWidth:0}}>
+                  <p style={{fontSize:12.5,fontWeight:700,color:"#1a1a1a",margin:0}}>{m.name}</p>
+                  <p style={{fontSize:10,color:"#8a7a6e",margin:"1px 0 0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.title}{m.practice&&` · ${m.practice}`}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+
+        /* ── list ── */
+        if (s.t==="list") return (
+          <div key={i} style={{padding:"4px 18px 8px"}}>
+            {s.items.map((item,ii)=>(
+              <div key={ii} style={{display:"flex",gap:8,alignItems:"flex-start",marginBottom:5}}>
+                <span style={{color:"#c5a059",fontWeight:700,flexShrink:0}}>·</span>
+                <span style={{fontSize:11.5,color:"#4a3a2e",lineHeight:1.45}}>{item}</span>
+              </div>
+            ))}
+          </div>
+        );
+
+        /* ── cta ── */
+        if (s.t==="cta") return (
+          <div key={i} style={{padding:"4px 18px 14px",textAlign:"center"}}>
+            {s.text && <p style={{fontSize:13,color:"#4a3a2e",margin:"0 0 10px",fontWeight:500}}>{s.text}</p>}
+            <div style={{background:"linear-gradient(135deg,#a14f2b,#c5a059)",color:"#fff",borderRadius:12,padding:"11px 22px",fontSize:13,fontWeight:700,display:"inline-block"}}>{s.btn}</div>
+          </div>
+        );
+
+        /* ── unknown block fallback ── */
         if (s.t==="block") return (
-          <div key={i} style={{padding:"0 18px",marginBottom:8}}>
-            <div style={{background:"rgba(161,79,43,0.08)",borderRadius:10,padding:"8px 12px",border:"1px solid rgba(161,79,43,0.15)"}}>
+          <div key={i} style={{padding:"0 18px",marginBottom:6}}>
+            <div style={{background:"rgba(161,79,43,.06)",borderRadius:8,padding:"6px 10px",border:"1px solid rgba(161,79,43,.12)"}}>
               <span style={{fontSize:9,fontWeight:700,color:"#a14f2b",textTransform:"uppercase",letterSpacing:".06em"}}>{s.name}</span>
             </div>
           </div>
