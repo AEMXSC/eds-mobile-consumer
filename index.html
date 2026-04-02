@@ -415,13 +415,16 @@ function App(){
       </div>
 
       {/* ── URL bar ── */}
-      <div style={{padding:"10px 32px",borderBottom:"1px solid #F3F4F6",background:"#F9FAFB"}}>
-        <p style={{fontSize:11,fontFamily:mono,color:"#059669",margin:0}}>
-          <span style={{color:"#6B7280"}}>const {"{"} {tab==="offers"?"data":"content"} {"}"} = await fetch(</span>
-          <a href={fetchUrl} target="_blank" rel="noopener" style={{color:"#059669",textDecoration:"none",borderBottom:"1px dashed #059669"}} title="Open raw JSON in new tab">{fetchUrl}</a>
-          <span style={{color:"#6B7280"}}>).then(r ={">"} r.json())</span>
-        </p>
-        {ts&&<p style={{fontSize:9,color:"#9CA3AF",margin:"3px 0 0",fontFamily:mono}}>last fetch: {ts} — edit in DA, publish, hit Fetch ↑</p>}
+      <div style={{padding:"18px 32px",borderBottom:"1px solid #E5E7EB",background:"#F9FAFB"}}>
+        <div style={{display:"flex",alignItems:"baseline",gap:10,flexWrap:"wrap"}}>
+          <span style={{fontSize:10,fontWeight:800,textTransform:"uppercase",letterSpacing:".1em",color:"#D97706",background:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:5,padding:"2px 8px",flexShrink:0,fontFamily:mono}}>1 line</span>
+          <p style={{fontSize:15,fontFamily:mono,color:"#059669",margin:0,lineHeight:1.6,wordBreak:"break-all"}}>
+            <span style={{color:"#9CA3AF"}}>const {"{"} {tab==="offers"?"data":"content"} {"}"} = await fetch(</span>
+            <a href={fetchUrl} target="_blank" rel="noopener" style={{color:"#059669",textDecoration:"none",borderBottom:"1px dashed #059669",fontWeight:600}} title="Open raw JSON in new tab">{fetchUrl}</a>
+            <span style={{color:"#9CA3AF"}}>).then(r ={">"} r.json())</span>
+          </p>
+        </div>
+        {ts&&<p style={{fontSize:10,color:"#9CA3AF",margin:"6px 0 0",fontFamily:mono}}>last fetch: {ts} — edit in DA, publish, hit Fetch ↑</p>}
       </div>
 
       {/* ── Body ── */}
